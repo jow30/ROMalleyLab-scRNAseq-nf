@@ -1,0 +1,512 @@
+---
+title: "`r params$title`"
+author: "`r params$author`"
+date: "_`r Sys.Date()`_"
+output:
+  html_document:
+    code_folding: show
+    df_print: paged
+    theme: flatly
+    highlight: tango
+    toc: yes
+    toc_depth: 4
+    toc_float:
+      collapsed: no
+      smooth_scroll: no
+    number_sections: yes
+    self_contained: true
+params:
+  title: "scRNA-seq summary report"
+  author: "Qiaoshan Lin"
+  # the absolute paths to the cellranger output folders
+  cellranger_dir: ["/project/gzy8899/qiaoshan/scRNAseq/experiments/At_Cr_5d_seedling_2025/At_Cr_5d_seedling_LG", "/project/gzy8899/qiaoshan/scRNAseq/experiments/At_Cr_5d_seedling_2025/At_Cr_5d_seedling_XC"]
+  # select a subset of all available IDs when cellranger_sel is provided (use the IDs specified in previous steps)
+  cellranger_sel: ["At_Cr_5d_seedling_LG", "At_Cr_5d_seedling_XC"]
+  # the absolute paths to the preprocess output folders
+  seur_dir: ["/project/gzy8899/qiaoshan/scRNAseq/experiments/At_Cr_5d_seedling_2025/demultiplex/Arabidopsis_thaliana"]
+  # select a subset of all available rds files when seur_sel is provided (sample names must be the same as the IDs specified in previous steps)
+  seur_sel: ["At_Cr_5d_seedling_LG"]
+  # Full scientific name of species (will be used for setting annotation reference)
+  species: "Arabidopsis thaliana"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+```
+
+
+```{r Load libraries, echo=FALSE, results='hide' }
+suppressWarnings(suppressPackageStartupMessages(library(fs)))
+suppressWarnings(suppressPackageStartupMessages(library(dplyr)))
+suppressWarnings(suppressPackageStartupMessages(library(Seurat)))
+suppressWarnings(suppressPackageStartupMessages(library(Biobase)))
+suppressWarnings(suppressPackageStartupMessages(library(htmltools)))
+
+```
+
+# Cellranger Summary
+
+## Cellranger Samples
+
+```{r Step 1 - Cellranger Samples, echo=FALSE, results='asis' }
+
+metrics_summary_tbs <- lapply(params$cellranger_dir, function(x) dir_ls(x, regexp = "metrics_summary.csv$", recurse = TRUE)) %>% unlist(use.names = F)
+
+if (!is.null(params$cellranger_sel)) {
+  metrics_summary_tbs <- lapply(params$cellranger_sel, function(x) metrics_summary_tbs[grep(paste0("/", x, "/outs"), metrics_summary_tbs)]) %>% unlist()
+}
+
+metrics_summary_names <- gsub("/outs/.*", "", metrics_summary_tbs)
+metrics_summary_basenames <- gsub(".*/", "", metrics_summary_names)
+
+if (any(duplicated(metrics_summary_basenames))) {
+  metrics_summary_basenames_uniq <- make.unique(metrics_summary_basenames)
+  metrics_summary_basenames_uniq[!isUnique(metrics_summary_basenames)&!duplicated(metrics_summary_basenames)] <- gsub("$",".0",metrics_summary_basenames[!isUnique(metrics_summary_basenames)&!duplicated(metrics_summary_basenames)])
+  metrics_summary_basenames <- metrics_summary_basenames_uniq
+}
+
+# Print sample names and full paths in a table
+DT::datatable(data.frame(Sample_ID = metrics_summary_basenames, Path = metrics_summary_tbs), rownames = F, options = list(pageLength = 100, dom = 'tip'))
+
+metrics_summary_tbs <- lapply(metrics_summary_tbs, read.csv) %>% setNames(metrics_summary_basenames)
+metrics_summary_tbs_mrg <- do.call(rbind, metrics_summary_tbs)
+
+```
+
+## Cellranger Metrics
+
+### Sequencing Metrics
+
+```{r Step 2.1 - Cellranger Sequencing Metrics, echo=FALSE }
+sequencing_cols <- c("Number.of.Reads", "Valid.Barcodes", "Valid.UMIs", "Sequencing.Saturation", "Q30.Bases.in.Barcode", "Q30.Bases.in.RNA.Read", "Q30.Bases.in.UMI")
+DT::datatable(metrics_summary_tbs_mrg[,sequencing_cols], rownames = T, options = list(pageLength = 100, dom = 'tip'))
+```
+
+### Mapping Metrics
+
+```{r Step 2.2 - Cellranger Mapping Metrics, echo=FALSE }
+mapping_cols <- colnames(metrics_summary_tbs_mrg)[grep("Reads.Mapped.", colnames(metrics_summary_tbs_mrg))]
+DT::datatable(metrics_summary_tbs_mrg[,mapping_cols], rownames = T, options = list(pageLength = 100, dom = 'tip'))
+```
+
+# Seurat Preprocessing Summary
+
+## Seurat Samples
+
+```{r Step 3 - Seurat Samples, echo=FALSE, results='asis' }
+
+seur_objs <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "seur_clean_.*.rds$", recurse = TRUE)) %>% unlist(use.names = F)
+summary_dims <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "summary_dims_.*.rds$", recurse = TRUE)) %>% unlist(use.names = F)
+summary_tbs <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "summary_tbs_.*.rds$", recurse = TRUE)) %>% unlist(use.names = F)
+summary_plts <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "summary_plts_.*.rds$", recurse = TRUE)) %>% unlist(use.names = F)
+
+if (!is.null(params$seur_sel)) {
+  seur_objs <- lapply(params$seur_sel, function(x) seur_objs[grep(paste0("seur_clean_", x, ".rds"), seur_objs)]) %>% unlist()
+  summary_dims <- lapply(params$seur_sel, function(x) summary_dims[grep(paste0("summary_dims_", x, ".rds"), summary_dims)]) %>% unlist()
+  summary_tbs <- lapply(params$seur_sel, function(x) summary_tbs[grep(paste0("summary_tbs_", x, ".rds"), summary_tbs)]) %>% unlist()
+  summary_plts <- lapply(params$seur_sel, function(x) summary_plts[grep(paste0("summary_plts_", x, ".rds"), summary_plts)]) %>% unlist()
+}
+
+seur_basenames <- gsub("^seur_clean_(.*).rds","\\1", basename(seur_objs))
+
+if (any(duplicated(seur_basenames))) {
+  seur_basenames_uniq <- make.unique(seur_basenames)
+  seur_basenames_uniq[!isUnique(seur_basenames)&!duplicated(seur_basenames)] <- gsub("$",".0",seur_basenames[!isUnique(seur_basenames)&!duplicated(seur_basenames)])
+  seur_basenames <- seur_basenames_uniq
+}
+
+# Print sample names and full paths in a table
+DT::datatable(data.frame(Sample_ID = seur_basenames, Path = seur_objs), rownames = F, options = list(pageLength = 100, dom = 'tip'))
+
+seur_objs <- lapply(seur_objs, readRDS) %>% setNames(seur_basenames)
+summary_dims <- lapply(summary_dims, readRDS) %>% setNames(seur_basenames)
+summary_tbs <- lapply(summary_tbs, readRDS) %>% setNames(seur_basenames)
+summary_plts <- lapply(summary_plts, readRDS) %>% setNames(seur_basenames)
+
+```
+
+## Preprocessing Parameters
+
+```{r Step 3 - Parameters, echo=FALSE, results='asis' }
+summary_opts <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "summary_opts_.*.rds$", recurse = TRUE)) %>% unlist(use.names = F)
+if (!is.null(params$seur_sel)) {
+  summary_opts <- lapply(params$seur_sel, function(x) summary_opts[grep(paste0("summary_opts_", x, ".rds"), summary_opts)]) %>% unlist()
+}
+summary_opts <- lapply(summary_opts, readRDS) 
+names(summary_opts) <- sapply(summary_opts, function(x) x$sample)
+opts_dt <- list()
+for (opts in summary_opts) {
+  df <- data.frame(
+    option = names(opts),
+    value  = sapply(opts, function(x) {
+      if (length(x) == 1) {
+        as.character(x)
+      } else {
+        paste(x, collapse = ", ")
+      }
+    }),
+    stringsAsFactors = FALSE
+  )
+  opts_dt[[opts$sample]] <- DT::datatable(df, rownames = FALSE, options = list(pageLength = 20))
+}
+htmltools::tagList(setNames(opts_dt, NULL))
+```
+
+## Data Dimensions Per Step
+
+```{r Step 4 - Data Size Per Step, echo=FALSE, results='asis' }
+summary_dims_mrg <- do.call(rbind, lapply(summary_dims, function(sample_steps) {
+  sapply(sample_steps, function(v) paste0(v["nCell"], " x ", v["nGene"]))
+}))
+summary_dims_mrg <- as.data.frame(summary_dims_mrg)
+cat("<h5>Data dimensions (cells x genes) at each preprocessing step:</h5>\n")
+DT::datatable(summary_dims_mrg, rownames = T, options = list(pageLength = 100, dom = 'tip'))
+
+if (!"After low-median-UMI/nGene Cluster Filtering" %in% colnames(summary_dims_mrg)) {
+  cat("*No Cluster removed due to too few markers.* \n")
+}
+if (!"After low-median-UMI/nGene Cluster Filtering" %in% colnames(summary_dims_mrg)) {
+  cat("*No low-median-UMI/nGene cluster detected.* \n")
+}
+```
+
+## Seurat Metrics Per Step
+
+### Cellranger Raw
+
+```{r Step 5.1 - Seurat Metrics Cellranger Raw, echo=FALSE, results='asis' }
+# Build separate combined tables per statistic: rows = samples; columns = metrics (original row names)
+flatten_metrics_tbs <- function(summary_tbs, step, stats_cols = c("Min.","1st Qu.","Median","Mean","3rd Qu.","Max."), digits = 3) {
+  raw_list <- lapply(names(summary_tbs), function(samp) summary_tbs[[samp]][[step]])
+  names(raw_list) <- names(summary_tbs)
+
+  # Build a table per statistic
+  stats_tables <- lapply(stats_cols, function(stat) {
+    samp_rows <- lapply(names(raw_list), function(samp) {
+      tb <- raw_list[[samp]]
+      if (!(stat %in% colnames(tb))) return(NULL)
+      vals <- tb[, stat, drop = T]
+      df_row <- as.data.frame(t(vals))
+      rownames(df_row) <- samp
+      df_row
+    })
+    samp_rows <- samp_rows[!sapply(samp_rows, is.null)]
+    if (!length(samp_rows)) return(data.frame())
+    combined <- do.call(rbind, samp_rows)
+    # Round numeric
+    num_cols <- vapply(combined, function(x) suppressWarnings(is.numeric(x)), logical(1))
+    combined[num_cols] <- lapply(combined[num_cols], function(v) signif(v, digits))
+    combined
+  })
+  names(stats_tables) <- stats_cols
+  
+  list(raw = raw_list, stats = stats_tables)
+}
+
+# Display fm$stats tables in Bootstrap tabs
+make_datatable_tabs <- function(tables, id_prefix = NULL) {
+  if (is.null(id_prefix)) {
+    id_prefix <- paste0("tabset_", as.integer(runif(1, 1e6, 2e6)))
+  }
+  
+  stats <- names(tables)
+  keep <- vapply(tables, function(x) nrow(x) > 0, logical(1))
+  tables <- tables[keep]
+  stats <- stats[keep]
+  if (!length(stats)) return(htmltools::HTML("<p>No statistics tables available.</p>"))
+  
+  nav <- htmltools::tags$ul(
+    class = "nav nav-tabs",
+    lapply(seq_along(stats), function(i) {
+      htmltools::tags$li(
+        class = ifelse(i == 3, "active", ""),
+        htmltools::tags$a(
+          href = paste0("#", id_prefix, "_", i),
+          `data-toggle` = "tab",
+          stats[i]
+        )
+      )
+    })
+  )
+  
+  panes <- htmltools::tags$div(
+    class = "tab-content",
+    lapply(seq_along(stats), function(i) {
+      htmltools::tags$div(
+        class = paste("tab-pane fade", ifelse(i == 3, "in active", "")),
+        id = paste0(id_prefix, "_", i),
+        DT::datatable(
+          tables[[i]],
+          rownames = TRUE,
+          options = list(pageLength = 50, dom = 'tip')
+        )
+      )
+    })
+  )
+  htmltools::tagList(nav, panes)
+}
+
+fm <- flatten_metrics_tbs(summary_tbs, "Cellranger Raw")
+make_datatable_tabs(fm$stats)
+
+```
+
+### After DIEM Debris Removal
+
+```{r Step 5.2 - Seurat Metrics After DIEM Debris Removal, echo=FALSE, results='asis' }
+fm <- flatten_metrics_tbs(summary_tbs, "After DIEM Debris Removal")
+make_datatable_tabs(fm$stats)
+```
+
+### After Unspliced Ratio Filtering
+
+```{r Step 5.3 - Seurat Metrics After Unspliced Ratio Filtering, echo=FALSE, results='asis' }
+fm <- flatten_metrics_tbs(summary_tbs, "After Unspliced Ratio Filtering")
+make_datatable_tabs(fm$stats)
+```
+
+### After UMI/CP/MT/Gene Filtering
+
+```{r Step 5.4 - Seurat Metrics After UMI/CP/MT/Gene Filtering, echo=FALSE, results='asis' }
+fm <- flatten_metrics_tbs(summary_tbs, "After UMI/CP/MT/Gene Filtering")
+make_datatable_tabs(fm$stats)
+```
+
+### After Doublet Removal
+
+```{r Step 5.5 - Seurat Metrics After Doublet Removal, echo=FALSE, results='asis' }
+fm <- flatten_metrics_tbs(summary_tbs, "After Doublet Removal")
+make_datatable_tabs(fm$stats)
+```
+
+### After Min Cluster Marker Filtering
+
+```{r Step 5.6 - Seurat Metrics After Min Cluster Marker Filtering, echo=FALSE, results='asis' }
+fm <- flatten_metrics_tbs(summary_tbs, "After Min Cluster Marker Filtering")
+make_datatable_tabs(fm$stats)
+```
+
+### After low-median-UMI/nGene Cluster Filtering
+
+```{r Step 5.7 - Seurat Metrics After low-median-UMI/nGene Cluster Filtering, echo=FALSE, results='asis' }
+fm <- flatten_metrics_tbs(summary_tbs, "After low-median-UMI/nGene Cluster Filtering")
+make_datatable_tabs(fm$stats)
+```
+
+## Seurat Plots Per Step
+
+### Cellranger Raw
+
+```{r Step 6.1 - Seurat Plots Cellranger Raw, echo=FALSE, results='asis' }
+plts <- lapply(summary_plts, function(x) x[["Cellranger Raw"]])
+plts_names <- lapply(plts, names) %>% unlist(use.names = F) %>% unique()
+for (p in plts_names) {
+  cat(sprintf("#### %s\n\n", p))
+  for (n in seq_along(plts)) {
+    cat(paste0("<h5> Sample: ", names(plts)[n]), "</h5>")
+    print(plts[[n]][[p]])
+    cat("\n\n")
+  }
+}
+```
+
+### After DIEM Debris Removal
+
+```{r Step 6.2 - Seurat Plots After DIEM Debris Removal, echo=FALSE, results='asis', fig.width=12, fig.height=6 }
+plts <- lapply(summary_plts, function(x) x[["After DIEM Debris Removal"]])
+plts_names <- lapply(plts, names) %>% unlist(use.names = F) %>% unique()
+for (p in plts_names) {
+  cat(sprintf("#### %s\n\n", p))
+  for (n in seq_along(plts)) {
+    cat(paste0("<h5> Sample: ", names(plts)[n]), "</h5>")
+    print(plts[[n]][[p]])
+    cat("\n\n")
+  }
+}
+```
+
+### After Unspliced Ratio Filtering
+
+```{r Step 6.3 - Seurat Plots After Unspliced Ratio Filtering, echo=FALSE, results='asis', fig.width=12, fig.height=6 }
+plts <- lapply(summary_plts, function(x) x[["After Unspliced Ratio Filtering"]])
+plts_names <- lapply(plts, names) %>% unlist(use.names = F) %>% unique()
+for (p in plts_names) {
+  cat(sprintf("#### %s\n\n", p))
+  for (n in seq_along(plts)) {
+    cat(paste0("<h5> Sample: ", names(plts)[n]), "</h5>")
+    print(plts[[n]][[p]])
+    cat("\n\n")
+  }
+}
+```
+
+### After UMI/CP/MT/Gene Filtering
+
+```{r Step 6.4 - Seurat Plots After UMI/CP/MT/Gene Filtering, echo=FALSE, results='asis', fig.width=14, fig.height=7 }
+plts <- lapply(summary_plts, function(x) x[["After UMI/CP/MT/Gene Filtering"]])
+plts_names <- lapply(plts, names) %>% unlist(use.names = F) %>% unique()
+for (p in plts_names[!plts_names=="Violin-clusters"]) {
+  cat(sprintf("#### %s\n\n", p))
+  for (n in seq_along(plts)) {
+    cat(paste0("<h5> Sample: ", names(plts)[n]), "</h5>")
+    print(plts[[n]][[p]])
+    cat("\n\n")
+  }
+}
+```
+
+```{r Step 6.4.2 - Seurat Plots After UMI/CP/MT/Gene Filtering, echo=FALSE, results='asis', fig.width=20, fig.height=7 }
+cat("#### Violin-clusters\n\n")
+for (n in seq_along(plts)) {
+  cat(paste0("<h5> Sample: ", names(plts)[n]), "</h5>")
+  print(plts[[n]][["Violin-clusters"]])
+  cat("\n\n")
+}
+```
+
+### After Doublet Removal
+
+```{r Step 6.5 - Seurat Plots After Doublet Removal, echo=FALSE, results='asis', fig.width=14, fig.height=7 }
+plts <- lapply(summary_plts, function(x) x[["After Doublet Removal"]])
+plts_names <- lapply(plts, names) %>% unlist(use.names = F) %>% unique()
+for (p in plts_names[!plts_names=="Violin-clusters"]) {
+  cat(sprintf("#### %s\n\n", p))
+  for (n in seq_along(plts)) {
+    cat(paste0("<h5> Sample: ", names(plts)[n]), "</h5>")
+    print(plts[[n]][[p]])
+    cat("\n\n")
+  }
+}
+```
+
+```{r Step 6.5.2 - Seurat Plots After Doublet Removal, echo=FALSE, results='asis', fig.width=20, fig.height=7 }
+cat("#### Violin-clusters\n\n")
+for (n in seq_along(plts)) {
+  cat(paste0("<h5> Sample: ", names(plts)[n]), "</h5>")
+  print(plts[[n]][["Violin-clusters"]])
+  cat("\n\n")
+}
+```
+
+### After Min Cluster Marker Filtering
+
+```{r Step 6.6 - Seurat Plots After Min Cluster Marker Filtering, echo=FALSE, results='asis', fig.width=14, fig.height=7 }
+plts <- lapply(summary_plts, function(x) x[["After Min Cluster Marker Filtering"]])
+plts_names <- lapply(plts, names) %>% unlist(use.names = F) %>% unique()
+for (p in plts_names[!plts_names=="Violin-clusters"]) {
+  cat(sprintf("#### %s\n\n", p))
+  for (n in seq_along(plts)) {
+    cat(paste0("<h5> Sample: ", names(plts)[n]), "</h5>")
+    print(plts[[n]][[p]])
+    cat("\n\n")
+  }
+}
+```
+
+```{r Step 6.6.2 - Seurat Plots After Min Cluster Marker Filtering, echo=FALSE, results='asis', fig.width=20, fig.height=7 }
+cat("#### Violin-clusters\n\n")
+for (n in seq_along(plts)) {
+  cat(paste0("<h5> Sample: ", names(plts)[n]), "</h5>")
+  print(plts[[n]][["Violin-clusters"]])
+  cat("\n\n")
+}
+```
+
+### After low-median-UMI/nGene Cluster Filtering
+
+```{r Step 6.7 - Seurat Plots After low-median-UMI/nGene Cluster Filtering, echo=FALSE, results='asis', fig.width=14, fig.height=7 }
+plts <- lapply(summary_plts, function(x) x[["After low-median-UMI/nGene Cluster Filtering"]])
+plts_names <- lapply(plts, names) %>% unlist(use.names = F) %>% unique()
+for (p in plts_names[!plts_names=="Violin-clusters"]) {
+  cat(sprintf("#### %s\n\n", p))
+  for (n in seq_along(plts)) {
+    cat(paste0("<h5> Sample: ", names(plts)[n]), "</h5>")
+    print(plts[[n]][[p]])
+    cat("\n\n")
+  }
+}
+```
+
+```{r Step 6.7.2 - Seurat Plots After low-median-UMI/nGene Cluster Filtering, echo=FALSE, results='asis', fig.width=20, fig.height=7 }
+cat("#### Violin-clusters\n\n")
+for (n in seq_along(plts)) {
+  cat(paste0("<h5> Sample: ", names(plts)[n]), "</h5>")
+  print(plts[[n]][["Violin-clusters"]])
+  cat("\n\n")
+}
+```
+
+# Cell Annotation 
+
+<!-- ## Marker-based Annotated Clusters -->
+
+<!-- ```{r Step 7.1 - Cell Annotation Marker Enrich, echo=FALSE, results='asis', fig.width=12, fig.height=12 } -->
+
+<!-- source("annotation.R") -->
+
+<!-- seur_objs <- lapply(seur_objs, function(seur) marker_enrich_anno(seur, "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/markers/arabidopsis_thaliana.marker_fd.csv")) -->
+<!-- # plot UMAP with annotated cluster names -->
+<!-- for (n in seq_along(seur_objs)) { -->
+<!--   seur <- seur_objs[[n]] -->
+<!--   p <- DimPlot(seur, reduction = "umap", label = TRUE, label.size = 5, group.by = "celltype") + -->
+<!--     ggtitle(paste0("Sample: ", names(seur_objs)[n])) + -->
+<!--     theme(legend.position = "bottom") -->
+<!--   print(p) -->
+<!--   # print cluster-module overlap table with cell numbers -->
+<!--   anno_tb <- table(Idents(seur), seur$celltype) %>% -->
+<!--     as.data.frame() %>% -->
+<!--     tidyr::pivot_wider(names_from = Var2, values_from = Freq, values_fill = 0) %>% -->
+<!--     dplyr::rename(Cluster = Var1) -->
+<!--   dt_tag <- htmltools::tagList( -->
+<!--     htmltools::tags$h5("Number of Cells Per Celltype/Cluster: "), -->
+<!--     DT::datatable(anno_tb, rownames = FALSE, options = list(pageLength = 100, dom = 'tip')), -->
+<!--     htmltools::tags$br() -->
+<!--   ) -->
+<!--   print(dt_tag) -->
+<!-- } -->
+
+<!-- ``` -->
+
+## Anchor-Transfer-based Annotated Cell
+
+```{r Step 7.2 - Cell Annotation Anchor Transfer, echo=FALSE, results='asis', fig.width=18, fig.height=12 }
+source("annotation.R")
+
+if(params$species=="Arabidopsis thaliana"){
+  seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/GSE297576_seurat_object.thaliana_seedling_atlas.RDS")
+}else if(params$species=="Arabidopsis lyrata"){
+  seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/GSE297576_seurat_object.lyrata_seedling_atlas.RDS")
+}else if(params$species=="Capsella rubella"){
+  seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Capsella_rubella/GSE297576_seurat_object.rubella_seedling_atlas.RDS")
+}
+
+for (s in seq_along(seur_objs)) {
+  seur_objs[[s]] <- UpdateSeuratObject(seur_objs[[s]])
+  rownames(seur_objs[[s]]) <- gsub("\\.Araport.*$", "", rownames(seur_objs[[s]]))
+  rownames(seur_objs[[s]]) <- gsub("\\.v.*$", "", rownames(seur_objs[[s]]))
+  seur_objs[[s]] <- anchor_transfer_anno(seur_objs[[s]], seur_ref)
+}
+
+for (n in seq_along(seur_objs)) {
+  seur <- seur_objs[[n]]
+  p <- DimPlot(seur, reduction = "umap", label = TRUE, label.size = 5, group.by = "predicted.id") + 
+    ggtitle(paste0("Sample: ", names(seur_objs)[n])) +
+    theme(legend.position = "bottom")
+  # FeaturePlot for prediction scores prediction.score.max
+  p_score <- FeaturePlot(seur, features = "prediction.score.max", reduction = "umap") +
+    ggtitle("Prediction Score")
+  p_out <- p+p_score
+  print(p_out)
+  # print cluster-module overlap table with cell numbers
+  anno_tb <- table(Idents(seur), seur$predicted.id) %>%
+    as.data.frame() %>%
+    tidyr::pivot_wider(names_from = Var2, values_from = Freq, values_fill = 0) %>%
+    dplyr::rename(Cluster = Var1)
+  dt_tag <- htmltools::tagList(
+    htmltools::tags$h5("Number of Cells Per Celltype/Cluster: "),
+    DT::datatable(anno_tb, rownames = FALSE, options = list(pageLength = 100, dom = 'tip')),
+    htmltools::tags$br()
+  )
+  print(dt_tag)
+}
+```
