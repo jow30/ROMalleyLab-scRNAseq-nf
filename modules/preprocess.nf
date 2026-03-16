@@ -23,7 +23,7 @@ process PREPROCESS_INITIAL {
 
     script:
     """
-    Rscript ${projectDir}/bin/preprocess.R \\
+    Rscript ${projectDir}/bin/preprocess_initial.R \\
         -i ${cellranger_outs_path} \\
         -s ${sample_id} \\
         -S '${species_name}' \\
@@ -130,7 +130,7 @@ process PREPROCESS_DEMUX {
     script:
     def display_species = species_name.replaceAll('_', ' ')
     """
-    Rscript ${projectDir}/bin/preprocess.R \\
+    Rscript ${projectDir}/bin/preprocess_initial.R \\
         -i ${demux_matrix_path} \\
         -s ${sample_id} \\
         -S '${display_species}' \\

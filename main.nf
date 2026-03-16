@@ -371,10 +371,17 @@ workflow SINGLE_SPECIES_WF {
         UNSPLICE_RATIO(VELOCYTO_RUN.out.loom, preprocess_dir)
 
         // Step 8: Full preprocess with velocyto
-        // Pass absolute path strings since PREPROCESS_WITH_VELOCYTO uses val inputs
-        def preprocess_velo_ch = CELLRANGER_COUNT.out.cellranger_out
-            .join(UNSPLICE_RATIO.out.unsplice_txt)
-            .map { sid, cr_dir, velo_txt -> [sid, "${cr_dir.toAbsolutePath()}/outs", velo_txt.toAbsolutePath().toString()] }
+        // Join velocyto txt and the 4 RDS files from PREPROCESS_INITIAL so Nextflow
+        // stages them into the PREPROCESS_WITH_VELOCYTO work directory.
+        def preprocess_velo_ch = UNSPLICE_RATIO.out.unsplice_txt
+            .join(PREPROCESS_INITIAL.out.seur_objs)
+            .join(PREPROCESS_INITIAL.out.summary_dims)
+            .join(PREPROCESS_INITIAL.out.summary_tbs)
+            .join(PREPROCESS_INITIAL.out.summary_plts)
+            .map { sid, velo_txt, seur_objs, summary_dims, summary_tbs, summary_plts ->
+                [sid, velo_txt.toAbsolutePath().toString(),
+                 seur_objs, summary_dims, summary_tbs, summary_plts]
+            }
 
         PREPROCESS_WITH_VELOCYTO(preprocess_velo_ch, species_name, preprocess_dir)
 
@@ -534,15 +541,36 @@ workflow MULTI_SPECIES_WF {
         UNSPLICE_RATIO_MULTI(VELOCYTO_RUN_MULTI.out.loom, preprocess_base)
 
         // Step 8: Full preprocess with velocyto for each species/sample
-        // matrix_path: published dir containing raw_feature_bc_matrix (preprocess.R appends it)
-        // velo_txt:    published unsplice ratio txt (preprocess/sp_dir/sample_id.txt)
-        def preprocess_multi_ch = UNSPLICE_RATIO_MULTI.out.unsplice_txt
-            .map { sp_dir, sid, txt ->
-                def sp = species_list.find { it.replaceAll(' ', '_') == sp_dir }
-                def matrix_path = file("${preprocess_base}/${sp_dir}/${sid}").toAbsolutePath().toString()
-                def velo_path   = file("${preprocess_base}/${sp_dir}/${sid}.txt").toAbsolutePath().toString()
-                [sp_dir, sid, sp, matrix_path, velo_path]
-            }
+        // Join the 4 RDS files from PREPROCESS_DEMUX (diem) so Nextflow stages them
+        // into the PREPROCESS_WITH_VELOCYTO_FOR_SPECIES work directory.
+        def preprocess_multi_ch
+        if (clean_method == 'diem') {
+            // PREPROCESS_DEMUX.out keys are [sample_id, sp_dir]; remap to [sp_dir, sample_id]
+            def demux_seur_objs_ch    = PREPROCESS_DEMUX.out.seur_objs.map    { sid, sp, rds -> [sp, sid, rds] }
+            def demux_summary_dims_ch = PREPROCESS_DEMUX.out.summary_dims.map { sid, sp, rds -> [sp, sid, rds] }
+            def demux_summary_tbs_ch  = PREPROCESS_DEMUX.out.summary_tbs.map  { sid, sp, rds -> [sp, sid, rds] }
+            def demux_summary_plts_ch = PREPROCESS_DEMUX.out.summary_plts.map { sid, sp, rds -> [sp, sid, rds] }
+
+            preprocess_multi_ch = UNSPLICE_RATIO_MULTI.out.unsplice_txt
+                .join(demux_seur_objs_ch,    by: [0, 1])
+                .join(demux_summary_dims_ch, by: [0, 1])
+                .join(demux_summary_tbs_ch,  by: [0, 1])
+                .join(demux_summary_plts_ch, by: [0, 1])
+                .map { sp_dir, sid, txt, seur_objs, summary_dims, summary_tbs, summary_plts ->
+                    def sp = species_list.find { it.replaceAll(' ', '_') == sp_dir }
+                    def velo_path = file("${preprocess_base}/${sp_dir}/${sid}.txt").toAbsolutePath().toString()
+                    [sp_dir, sid, sp, velo_path, seur_objs, summary_dims, summary_tbs, summary_plts]
+                }
+        } else {
+            // chi: PREPROCESS_DEMUX is not run; RDS files must be provided from elsewhere.
+            // For now this path remains unsupported and will fail at channel build time.
+            preprocess_multi_ch = UNSPLICE_RATIO_MULTI.out.unsplice_txt
+                .map { sp_dir, sid, txt ->
+                    def sp = species_list.find { it.replaceAll(' ', '_') == sp_dir }
+                    def velo_path = file("${preprocess_base}/${sp_dir}/${sid}.txt").toAbsolutePath().toString()
+                    [sp_dir, sid, sp, velo_path]
+                }
+        }
         PREPROCESS_WITH_VELOCYTO_FOR_SPECIES(preprocess_multi_ch, preprocess_base)
 
         // Steps 9-10: Summary and integration per species

@@ -1,5 +1,3 @@
-test_single/
-test_multi/
 test/
 refs/
 .nextflow*

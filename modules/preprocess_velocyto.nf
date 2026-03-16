@@ -12,7 +12,8 @@ process PREPROCESS_WITH_VELOCYTO {
     publishDir "${publish_dir}", mode: 'copy'
 
     input:
-    tuple val(sample_id), val(cellranger_outs_path), val(velocyto_txt_path)
+    tuple val(sample_id), val(velocyto_txt_path),
+          path(seur_objs_rds), path(summary_dims_rds), path(summary_tbs_rds), path(summary_plts_rds)
     val species_name
     val publish_dir
 
@@ -26,14 +27,12 @@ process PREPROCESS_WITH_VELOCYTO {
 
     script:
     """
-    Rscript ${projectDir}/bin/preprocess.R \\
-        -i ${cellranger_outs_path} \\
+    Rscript ${projectDir}/bin/preprocess_velocyto.R \\
         -s ${sample_id} \\
         -S '${species_name}' \\
         -o . \\
         -v ${velocyto_txt_path} \\
         --ref_yaml ${params.ref_yaml} \\
-        --min_diem_debris_score ${params.min_diem_debris_score} \\
         --min_unsplice_ratio ${params.min_unsplice_ratio} \\
         --min_nCount_RNA ${params.min_nCount_RNA} \\
         --min_nFeature_RNA ${params.min_nFeature_RNA} \\
@@ -54,7 +53,8 @@ process PREPROCESS_WITH_VELOCYTO_FOR_SPECIES {
     publishDir "${publish_dir_base}/${sp_dir}", mode: 'copy'
 
     input:
-    tuple val(sp_dir), val(sample_id), val(species_name), val(cellranger_outs_path), val(velocyto_txt_path)
+    tuple val(sp_dir), val(sample_id), val(species_name), val(velocyto_txt_path),
+          path(seur_objs_rds), path(summary_dims_rds), path(summary_tbs_rds), path(summary_plts_rds)
     val publish_dir_base
 
     output:
@@ -67,14 +67,12 @@ process PREPROCESS_WITH_VELOCYTO_FOR_SPECIES {
 
     script:
     """
-    Rscript ${projectDir}/bin/preprocess.R \\
-        -i ${cellranger_outs_path} \\
+    Rscript ${projectDir}/bin/preprocess_velocyto.R \\
         -s ${sample_id} \\
         -S '${species_name}' \\
         -o . \\
         -v ${velocyto_txt_path} \\
         --ref_yaml ${params.ref_yaml} \\
-        --min_diem_debris_score ${params.min_diem_debris_score} \\
         --min_unsplice_ratio ${params.min_unsplice_ratio} \\
         --min_nCount_RNA ${params.min_nCount_RNA} \\
         --min_nFeature_RNA ${params.min_nFeature_RNA} \\
