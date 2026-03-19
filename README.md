@@ -1,6 +1,6 @@
 # snRNAseq Processing Pipeline — User Guide
 
-A Nextflow pipeline for processing single-nucleus RNA sequencing data from plants. It runs end-to-end: reference preparation → CellRanger count → filtering/demultiplexing → read counting → Velocyto → preprocessing → summary report → integration.
+A Nextflow pipeline for processing single-nucleus RNA sequencing data from plants. It runs end-to-end: reference preparation → CellRanger count → read counting → filtering/demultiplexing → summary report → integration.
 
 ---
 
@@ -8,7 +8,7 @@ A Nextflow pipeline for processing single-nucleus RNA sequencing data from plant
 
 - Nextflow ≥ 23.04.0
 - SLURM cluster (Midway3, account `pi-gzy8899`)
-- Modules: `cellranger/9.0.1`, `agat/1.5.0`, `scrnaseq/1.0`, `velocyto/0.17.17`, `samtools/1.22.1`, `deeptools/3.5.6`
+- Modules: `cellranger/9.0.1`, `agat/1.6.1`, `scrnaseq/1.0`, `velocyto/0.17.17`, `samtools/1.22.1`, `deeptools/3.5.6`
 
 ---
 
@@ -32,7 +32,7 @@ nextflow run jow30/ROMalleyLab-scRNAseq-nf \
   --species "Arabidopsis thaliana,Capsella rubella"
 ```
 
-Resume a run after interruption:
+Resume a run after an interruption:
 
 ```bash
 nextflow run jow30/ROMalleyLab-scRNAseq-nf --input samplesheet.csv --out exp1-nf-results {$otherParams} -resume
@@ -55,8 +55,8 @@ Example `samplesheet.csv`:
 
 ```
 sample,fastq_dir,fastq_R1,fastq_R2
-exp,/data/fastq/sample1,RO1_S1_L001_R1_001.fastq.gz,RO1_S1_L001_R2_001.fastq.gz
-ctrl,/data/fastq/sample2,RO2_S2_L001_R1_001.fastq.gz,RO2_S2_L001_R2_001.fastq.gz
+exp,/project/gzy8899/data/202510_DAP_10X,RO1_S1_L001_R1_001.fastq.gz,RO1_S1_L001_R2_001.fastq.gz
+ctrl,/project/gzy8899/data/202510_DAP_10X,RO2_S2_L001_R1_001.fastq.gz,RO2_S2_L001_R2_001.fastq.gz
 ```
 
 FASTQ filenames should follow standard Illumina naming: `*_S*_L*_R*_*.fastq.gz`.
@@ -97,8 +97,14 @@ For any other species, supply `--genome` and `--gtf` manually (see below).
 | Parameter  | Description                          |
 |------------|--------------------------------------|
 | `--genome` | Path to genome FASTA file            |
-| `--gtf`    | Path to GTF annotation file (`.gtf`, `.gff3`, or `.gff`) |
-| `--ref_yaml` | Path to scQC YAML (default: `refs/scQC.yaml`) |
+| `--gtf`    | Path to annotation file (`.gtf`, `.gff3`, or `.gff`) |
+| `--ref_yaml` | Path to scQC YAML which contains information about organelles (default: `refs/scQC.yaml`) |
+
+### Library QC
+
+| Parameter                | Default | Description                                                  |
+|--------------------------|---------|--------------------------------------------------------------|
+| `--bin_size`             | `500`   | Window size to count reads for mapping efficiency analysis   |
 
 ### Cell Filtering
 
@@ -136,6 +142,12 @@ These parameters only apply when running with multiple species (`--clean chi` is
 | Parameter     | Default | Description                          |
 |---------------|---------|--------------------------------------|
 | `--nFeatures` | `3000`  | Number of features for integration   |
+
+### Cleanup
+
+| Parameter   | Default | Description                          |
+|-------------|---------|--------------------------------------|
+| `--cleanup` | `false` | Cleanup large intermediate files     |
 
 ---
 
@@ -187,5 +199,5 @@ If `cellranger` points to an existing directory it will be used directly; otherw
 ## Help
 
 ```bash
-nextflow run main.nf --help
+nextflow run jow30/ROMalleyLab-scRNAseq-nf --help
 ```
