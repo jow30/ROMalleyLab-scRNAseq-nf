@@ -5,10 +5,10 @@ process UNSPLICE_RATIO {
     publishDir "${publish_dir}", mode: 'copy'
 
     input:
-    tuple val(sample_id), path(loom_file), val(publish_dir)
+    tuple val(key), path(loom_file), val(sample_id), val(publish_dir)
 
     output:
-    tuple val(sample_id), path("${sample_id}.txt"), emit: unsplice_txt
+    tuple val(key), path("${sample_id}.txt"), emit: unsplice_txt
 
     script:
     """

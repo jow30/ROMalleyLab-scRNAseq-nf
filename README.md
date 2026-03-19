@@ -117,6 +117,7 @@ These thresholds are applied during preprocessing. Defaults work well for most p
 | `--remove_doublet`       | `true`  | Remove doublets                      |
 | `--max_doublet_score`    | `0.4`   | Maximum doublet pANN score           |
 | `--min_nClusterMarker`   | `5`     | Minimum cluster marker genes         |
+| `--min_cells`            | `500`   | Minimum cells required after each filtering step; samples with fewer cells are skipped |
 
 ### Multi-species Demultiplexing and Filtering
 

@@ -76,6 +76,11 @@ option_list <- list(
               default = 5,
               help = "Minimum number of markers detected for a valid cluster [default = %default]"),
 
+  make_option(c("--min_cells"),
+              type = "integer",
+              default = 500,
+              help = "Minimum number of cells required to continue; samples with fewer cells are skipped [default = %default]"),
+
   make_option(c("--threads"),
               type = "integer",
               default = 1,
@@ -157,6 +162,17 @@ saveRDS(opt, paste0("summary_opts_", opt$sample, ".rds"))
 
 set.seed(123)
 
+# Exit gracefully when too few cells remain; Nextflow treats exit 0 as success
+# so the process produces no outputs and downstream channels drop this sample.
+check_cells <- function(obj, step, min_cells = 500) {
+  n <- ncol(obj)
+  if (n < min_cells) {
+    cat("###CheckPoint### ERROR: Only", n, "cells remaining after", step,
+        "(minimum required:", min_cells, "). Skipping this sample.\n")
+    quit(save = "no", status = 0)
+  }
+}
+
 # Load RDS files produced by preprocess_initial.R (staged into work dir by Nextflow)
 summary_dims <- readRDS(paste0("summary_dims_", opt$sample, ".rds"))
 summary_tbs  <- readRDS(paste0("summary_tbs_",  opt$sample, ".rds"))
@@ -190,6 +206,7 @@ summary_tbs[["After Unspliced Ratio Filtering"]] <- do.call(rbind, lapply(seur_d
 seur_objs[["After Unspliced Ratio Filtering"]] <- seur_diem_velocyto
 
 cat("###CheckPoint### Number of remaining cell barcodes after removing low un-spliced ratio:", ncol(seur_diem_velocyto), "\n")
+check_cells(seur_diem_velocyto, "unspliced ratio filtering", opt$min_cells)
 
 # Remove ribosomal genes --------------------------------------------------
 # Here the ribosomal genes in the list are actually ribosomal-protein-coding genes. They can be quantified as usual.
@@ -223,6 +240,7 @@ seur_diem_velocyto_flts <- seur_diem_velocyto_flts[ !(rownames(seur_diem_velocyt
 cat("###CheckPoint###", length(mt_genes), "MT genes removed.\n")
 cat("###CheckPoint###", length(cp_genes), "CP genes removed.\n")
 cat("###CheckPoint### Number of genes left after CP/MT gene filtering:", nrow(seur_diem_velocyto_flts), "\n\n")
+check_cells(seur_diem_velocyto_flts, "UMI/CP/MT/Gene filtering", opt$min_cells)
 
 summary_dims[["After UMI/CP/MT/Gene Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto_flts), "nGene"=nrow(seur_diem_velocyto_flts))
 
@@ -346,6 +364,7 @@ if(opt$remove_doublet){
   seur_diem_velocyto_flts_dblt <- seur_diem_velocyto_flts
   cat("###CheckPoint###", ncol(seur_diem_velocyto_flts_dblt@assays$RNA), " cells left. Doublet removal was disabled. \n")
 }
+check_cells(seur_diem_velocyto_flts_dblt, "doublet removal", opt$min_cells)
 
 # reclustering
 seur_diem_velocyto_flts_dblt <- SCTransform(seur_diem_velocyto_flts_dblt, variable.features.n = opt$nHVG, verbose = FALSE)
@@ -410,6 +429,7 @@ if(nrow(cluster_markers)<opt$min_nClusterMarker){
     cat("###CheckPoint###", "Clusters removed due to too few markers:", paste(removed_clusters, collapse = ", "), "\n")
     cat("###CheckPoint### Number of cell barcodes left after low-marker cluster filtering:", ncol(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "\n")
     cat("###CheckPoint### Number of genes left after low-marker cluster filtering:", nrow(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "\n\n")
+    check_cells(seur_diem_velocyto_flts_dblt_cls, "low-marker cluster filtering", opt$min_cells)
 
     # reclustering
     seur_diem_velocyto_flts_dblt_cls <- SCTransform(seur_diem_velocyto_flts_dblt_cls, variable.features.n = opt$nHVG, verbose = FALSE)
@@ -490,6 +510,7 @@ if(length(clusters)>1){
     cat("###CheckPoint###", "Clusters removed due to low median UMI/nGene:", paste(low_clusters$seurat_clusters, collapse = ", "), "\n")
     cat("###CheckPoint### Number of cell barcodes left after low-marker cluster filtering:", ncol(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "\n")
     cat("###CheckPoint### Number of genes left after low-marker cluster filtering:", nrow(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "\n\n")
+    check_cells(seur_diem_velocyto_flts_dblt_cls, "low-median-UMI/nGene cluster filtering", opt$min_cells)
 
     # reclustering
     seur_diem_velocyto_flts_dblt_cls <- SCTransform(seur_diem_velocyto_flts_dblt_cls, variable.features.n = opt$nHVG, verbose = FALSE)

@@ -9,18 +9,18 @@ process DEMUX_BAM {
     val species_list
 
     output:
-    // Per-species sample directory: <sp_dir>/<sample_id>/
+    // Per-species sample directory: <sp_dir>/cellranger/<sample_id>/
     // Contains outs/possorted_genome_bam.bam — mirrors CellRanger layout so
     // VELOCYTO_RUN can read ${cellranger_dir}/outs/possorted_genome_bam.bam
-    tuple val(sample_id), path("*/${sample_id}"), emit: demux_sample_dirs
+    tuple val(sample_id), path("*/cellranger/${sample_id}"), emit: demux_sample_dirs
 
     script:
     def species_cmds = species_list.collect { sp ->
         def sp_dir = sp.replaceAll(' ', '_')
         """echo "Start demultiplexing BAM for ${sp}"
-mkdir -p ${sp_dir}/${sample_id}/outs
+mkdir -p ${sp_dir}/cellranger/${sample_id}/outs
 INPUT_BAM=${cellranger_outs_path}/possorted_genome_bam.bam
-OUTPUT_BAM=${sp_dir}/${sample_id}/outs/possorted_genome_bam.bam
+OUTPUT_BAM=${sp_dir}/cellranger/${sample_id}/outs/possorted_genome_bam.bam
 samtools view -h -@ ${task.cpus} "\${INPUT_BAM}" | \\
 awk -v re="(${sp_dir})_+" '
     BEGIN { OFS="\\t" }

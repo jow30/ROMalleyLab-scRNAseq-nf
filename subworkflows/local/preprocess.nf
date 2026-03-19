@@ -12,6 +12,11 @@
  * ":::" cannot appear in validated sample/species names, making it an
  * unambiguous separator.  All input channels share this key so .join() works
  * uniformly regardless of mode.
+ *
+ * Plain sample_id (sid) is derived from the key inside this workflow and
+ * threaded into processes that need it for file naming (VELOCYTO_RUN,
+ * CELL_FILTERING).  Other processes use the full key as their sample_id —
+ * their outputs are passed by staged path so the filename does not matter.
  */
 
 nextflow.enable.dsl = 2
@@ -46,19 +51,28 @@ workflow PREPROCESS {
 
     main:
 
+    // Plain sample_id extracted from composite key.
+    // Single-species: key == sid.  Multi-species: key = "${sp_dir}:::${sid}".
+    def sid_ch = cr_dirs_ch.map { key, dir ->
+        [key, key.contains(':::') ? key.tokenize(':::').last() : key]
+    }
+
     // ── SEPARATE_READS ────────────────────────────────────────────────────────
-    SEPARATE_READS(cr_dirs_ch.join(preprocess_pub_ch))
+    SEPARATE_READS(cr_dirs_ch.join(sid_ch).join(preprocess_pub_ch))
 
     def all_bams_ch = SEPARATE_READS.out.mapped_bam
+        .join(sid_ch)
         .join(preprocess_pub_ch)
-        .map { key, bam, pub -> [key, 'mapped', bam, pub] }
+        .map { key, bam, sid, pub -> [key, 'mapped', bam, sid, pub] }
         .mix(
             SEPARATE_READS.out.uniq_bam
+                .join(sid_ch)
                 .join(preprocess_pub_ch)
-                .map { key, bam, pub -> [key, 'uniq', bam, pub] },
+                .map { key, bam, sid, pub -> [key, 'uniq', bam, sid, pub] },
             SEPARATE_READS.out.multi_bam
+                .join(sid_ch)
                 .join(preprocess_pub_ch)
-                .map { key, bam, pub -> [key, 'multi', bam, pub] }
+                .map { key, bam, sid, pub -> [key, 'multi', bam, sid, pub] }
         )
 
     // ── COUNT_READS ───────────────────────────────────────────────────────────
@@ -70,15 +84,17 @@ workflow PREPROCESS {
     def velo_ch = cr_dirs_ch
         .join(barcodes_ch)
         .join(gtf_ch)
+        .join(sid_ch)
         .join(cellranger_pub_ch)
-        .map { key, cr_dir, bc, gtf, pub -> [key, cr_dir, bc, gtf, pub] }
+        .map { key, cr_dir, bc, gtf, sid, pub -> [key, cr_dir, bc, gtf, sid, pub] }
 
     VELOCYTO_RUN(velo_ch)
 
     // ── UNSPLICE_RATIO ────────────────────────────────────────────────────────
     def unsplice_ch = VELOCYTO_RUN.out.loom
+        .join(sid_ch)
         .join(preprocess_pub_ch)
-        .map { key, loom, pub -> [key, loom, pub] }
+        .map { key, loom, sid, pub -> [key, loom, sid, pub] }
 
     UNSPLICE_RATIO(unsplice_ch)
 
@@ -89,9 +105,10 @@ workflow PREPROCESS {
     def cell_filter_ch = UNSPLICE_RATIO.out.unsplice_txt
         .join(rds_ch)
         .join(species_ch)
+        .join(sid_ch)
         .join(preprocess_pub_ch)
-        .map { key, txt, seur, dims, tbs, plts, sp, pub ->
-            [key, sp, txt, seur, dims, tbs, plts, pub]
+        .map { key, txt, seur, dims, tbs, plts, sp, sid, pub ->
+            [key, sid, sp, txt, seur, dims, tbs, plts, pub]
         }
 
     CELL_FILTERING(cell_filter_ch)

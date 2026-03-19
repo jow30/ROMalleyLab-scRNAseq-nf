@@ -7,11 +7,12 @@
  *   ├── cellranger/<sample>/
  *   └── demultiplex/
  *       └── <sp_dir>/
- *           ├── <sample>/
- *           │   ├── raw_feature_bc_matrix/    (DEMULTIPLEX process)
- *           │   └── outs/
- *           │       ├── possorted_genome_bam.bam    (DEMUX_BAM)
- *           │       └── possorted_genome_bam.bam.bai
+ *           ├── cellranger/
+ *           │   └── <sample>/
+ *           │       ├── raw_feature_bc_matrix/    (DEMULTIPLEX process)
+ *           │       └── outs/
+ *           │           ├── possorted_genome_bam.bam    (DEMUX_BAM)
+ *           │           └── possorted_genome_bam.bam.bai
  *           ├── preprocess/
  *           └── integration/
  *
@@ -66,13 +67,10 @@ workflow MULTI_SPECIES_WF {
     def demux_dirs_flat = DEMULTIPLEX.out.demux_sample_dirs
         .flatMap { sid, dirs ->
             (dirs instanceof List ? dirs : [dirs]).collect { d ->
-                ["${d.parent.name}:::${sid}", d]
+                // d = <sp_dir>/cellranger/<sample_id>  →  d.parent.parent.name = sp_dir
+                ["${d.parent.parent.name}:::${sid}", d]
             }
         }
-
-    // Lookup channel: [key, sample_id] — recovers the plain sample_id from
-    // the composite key without string-splitting in downstream closures.
-    def key_to_sid_ch = demux_dirs_flat.map { key, d -> [key, d.name] }
 
     // ── Build unified preprocess_rds_ch (diem vs chi) ────────────────────────
     // Both branches produce: [key, barcodes_tsv, seur_objs, dims, tbs, plts]
@@ -80,17 +78,20 @@ workflow MULTI_SPECIES_WF {
 
     if (clean_method == 'diem') {
         // Run DIEM_DEBRIS_REMOVAL on each demuxed species/sample matrix.
-        // DEMULTIPLEX_PROCESS has already published raw_feature_bc_matrix there;
-        // preprocess_initial.R reads it from the published path.
-        def diem_input_ch = demux_dirs_flat
-            .map { key, d ->
-                def sp_dir_name = d.parent.name
-                def sid         = d.name
-                def sp          = species_list.find { it.replaceAll(' ', '_') == sp_dir_name }
-                def display_sp  = sp ?: sp_dir_name.replaceAll('_', ' ')
-                def matrix_dir  = file("${demux_base}/${sp_dir_name}/${sid}").toAbsolutePath().toString()
-                def pub_dir     = "${demux_base}/${sp_dir_name}/preprocess"
-                [sid, sp_dir_name, matrix_dir, display_sp, pub_dir]
+        // Derived from demux_matrices (DEMULTIPLEX_PROCESS output) — not from DEMUX_BAM —
+        // so DIEM only starts after DEMULTIPLEX_PROCESS has finished publishing the matrices.
+        // mat staged path: <sp_dir>/cellranger/<sample_id>/raw_feature_bc_matrix
+        def diem_input_ch = DEMULTIPLEX.out.demux_matrices
+            .flatMap { sid, matrices ->
+                (matrices instanceof List ? matrices : [matrices]).collect { mat ->
+                    // mat.parent.parent.parent.parent.name = sp_dir (raw_feature_bc_matrix → outs → sample_id → cellranger → sp_dir)
+                    def sp_dir_name = mat.parent.parent.parent.parent.name
+                    def sp          = species_list.find { it.replaceAll(' ', '_') == sp_dir_name }
+                    def display_sp  = sp ?: sp_dir_name.replaceAll('_', ' ')
+                    def matrix_dir  = file("${demux_base}/${sp_dir_name}/cellranger/${sid}/outs").toAbsolutePath().toString()
+                    def pub_dir     = "${demux_base}/${sp_dir_name}/preprocess"
+                    [sid, sp_dir_name, matrix_dir, display_sp, pub_dir]
+                }
             }
 
         DIEM_DEBRIS_REMOVAL(diem_input_ch)
@@ -140,24 +141,24 @@ workflow MULTI_SPECIES_WF {
 
     // ── Per-item channels for PREPROCESS ─────────────────────────────────────
     def gtf_ch = demux_dirs_flat.map { key, d ->
-        def sp_dir_name = d.parent.name
+        def sp_dir_name = d.parent.parent.name
         def sp = species_list.find { it.replaceAll(' ', '_') == sp_dir_name }
         [key, file(anno_map[sp].gtf)]
     }
 
     def species_ch = demux_dirs_flat.map { key, d ->
-        def sp_dir_name = d.parent.name
+        def sp_dir_name = d.parent.parent.name
         def sp = species_list.find { it.replaceAll(' ', '_') == sp_dir_name }
         [key, sp]
     }
 
     def preprocess_pub_ch = demux_dirs_flat.map { key, d ->
-        def sp_dir_name = d.parent.name
+        def sp_dir_name = d.parent.parent.name
         [key, "${demux_base}/${sp_dir_name}/preprocess"]
     }
 
     def cellranger_pub_ch = demux_dirs_flat.map { key, d ->
-        def sp_dir_name = d.parent.name
+        def sp_dir_name = d.parent.parent.name
         [key, "${demux_base}/${sp_dir_name}/cellranger"]
     }
 
@@ -187,16 +188,17 @@ workflow MULTI_SPECIES_WF {
         def sp_preprocess = "${demux_base}/${sp_dir}/preprocess"
         def anno          = anno_map[sp]
 
-        // Filter to this species, recover plain sample_id via key_to_sid_ch
+        // Filter to this species; extract plain sample_id from composite key
         def sp_seur_sels = PREPROCESS.out.seur_clean
             .filter { key, rds -> key.startsWith("${sp_dir}:::") }
-            .join(key_to_sid_ch)
-            .map    { key, rds, sid -> sid }
+            .map    { key, rds -> key.tokenize(':::').last() }
             .collect()
+            .ifEmpty([])
 
         def sp_summary = cr_dirs_collected.map { dirs -> [dirs] }
             .combine(cr_sels_collected.map { sels -> [sels] })
             .combine(sp_seur_sels.map { sels -> [sels] })
+            .filter { cr_dirs, cr_sels, sp_sels -> !sp_sels.isEmpty() }
             .map { cr_dirs, cr_sels, sp_sels ->
                 [cr_dirs, cr_sels, [file(sp_preprocess).toAbsolutePath().toString()], sp_sels, sp, sp_preprocess]
             }
@@ -206,6 +208,8 @@ workflow MULTI_SPECIES_WF {
             .filter { key, rds -> key.startsWith("${sp_dir}:::") }
             .map    { key, rds -> rds.toAbsolutePath().toString() }
             .collect()
+            .ifEmpty([])
+            .filter { rds_list -> rds_list.size() > 1 }
             .map    { rds_list ->
                 [rds_list, anno.markers, anno.seurat_ref, "${demux_base}/${sp_dir}/integration"]
             }

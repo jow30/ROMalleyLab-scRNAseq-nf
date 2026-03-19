@@ -5,17 +5,17 @@ process CELL_FILTERING {
     publishDir "${publish_dir}", mode: 'copy'
 
     input:
-    tuple val(sample_id), val(species_name), path(velocyto_txt),
+    tuple val(key), val(sample_id), val(species_name), path(velocyto_txt),
           path(seur_objs_rds), path(summary_dims_rds), path(summary_tbs_rds), path(summary_plts_rds),
           val(publish_dir)
 
     output:
-    tuple val(sample_id), path("seur_clean_${sample_id}.rds"),       emit: seur_clean
-    tuple val(sample_id), path("seur_objs_${sample_id}.rds"),        emit: seur_objs
-    tuple val(sample_id), path("summary_dims_${sample_id}.rds"),     emit: summary_dims
-    tuple val(sample_id), path("summary_tbs_${sample_id}.rds"),      emit: summary_tbs
-    tuple val(sample_id), path("summary_plts_${sample_id}.rds"),     emit: summary_plts
-    tuple val(sample_id), path("summary_opts_${sample_id}.rds"),     emit: summary_opts
+    tuple val(key), path("seur_clean_${sample_id}.rds"),       emit: seur_clean,    optional: true
+    tuple val(key), path("seur_objs_${sample_id}.rds"),        emit: seur_objs,     optional: true
+    tuple val(key), path("summary_dims_${sample_id}.rds"),     emit: summary_dims,  optional: true
+    tuple val(key), path("summary_tbs_${sample_id}.rds"),      emit: summary_tbs,   optional: true
+    tuple val(key), path("summary_plts_${sample_id}.rds"),     emit: summary_plts,  optional: true
+    tuple val(key), path("summary_opts_${sample_id}.rds"),     emit: summary_opts,  optional: true
 
     script:
     """
@@ -35,6 +35,7 @@ process CELL_FILTERING {
         --remove_doublet ${params.remove_doublet ? 'TRUE' : 'FALSE'} \\
         --max_doublet_score ${params.max_doublet_score} \\
         --min_nClusterMarker ${params.min_nClusterMarker} \\
+        --min_cells ${params.min_cells} \\
         --threads ${task.cpus}
     """
 }

@@ -5,10 +5,10 @@ process COUNT_READS {
     publishDir "${publish_dir}", mode: 'copy'
 
     input:
-    tuple val(sample_id), val(read_type), path(bam_file), val(publish_dir)
+    tuple val(key), val(read_type), path(bam_file), val(sample_id), val(publish_dir)
 
     output:
-    tuple val(sample_id), val(read_type), path("${sample_id}.${read_type}.tsv"), emit: count_table
+    tuple val(key), val(read_type), path("${sample_id}.${read_type}.tsv"), emit: count_table
 
     script:
     """

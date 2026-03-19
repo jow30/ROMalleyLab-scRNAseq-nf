@@ -32,8 +32,10 @@ workflow DEMULTIPLEX_WF {
     DEMUX_BAM(cr_outs_ch, species_list)
 
     emit:
-    // [sample_id, path(*/<sample_id>)]  — one tuple per sample, dirs is a list when >1 species
+    // [sample_id, path(*/cellranger/<sample_id>)]  — one tuple per sample, dirs is a list when >1 species
     demux_sample_dirs = DEMUX_BAM.out.demux_sample_dirs
+    // [sample_id, path(*/cellranger/*/raw_feature_bc_matrix)]  — used as dependency signal in diem mode
+    demux_matrices    = DEMULTIPLEX_PROCESS.out.demux_matrices
     // chi-mode outputs from demultiplex.R (optional: absent in diem mode)
     barcodes          = DEMULTIPLEX_PROCESS.out.barcodes
     rds_files         = DEMULTIPLEX_PROCESS.out.rds_files

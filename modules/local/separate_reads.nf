@@ -5,12 +5,12 @@ process SEPARATE_READS {
     publishDir "${publish_dir}", mode: 'copy'
 
     input:
-    tuple val(sample_id), path(cr_dir), val(publish_dir)
+    tuple val(key), path(cr_dir), val(sample_id), val(publish_dir)
 
     output:
-    tuple val(sample_id), path("${sample_id}.mapped.bam"), emit: mapped_bam
-    tuple val(sample_id), path("${sample_id}.uniq.bam"),   emit: uniq_bam
-    tuple val(sample_id), path("${sample_id}.multi.bam"),  emit: multi_bam
+    tuple val(key), path("${sample_id}.mapped.bam"), emit: mapped_bam
+    tuple val(key), path("${sample_id}.uniq.bam"),   emit: uniq_bam
+    tuple val(key), path("${sample_id}.multi.bam"),  emit: multi_bam
 
     script:
     """
