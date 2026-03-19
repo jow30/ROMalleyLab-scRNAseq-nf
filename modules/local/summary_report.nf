@@ -1,19 +1,10 @@
-/*
- * Summary report module
- */
-
 process SUMMARY_REPORT {
-    label 'process_low'
+    label 'process_high'
     label 'scrnaseq'
     publishDir "${publish_dir}", mode: 'copy'
 
     input:
-    val cellranger_dirs    // list of cellranger output dirs
-    val cellranger_sel     // list of sample names
-    val seur_dirs          // list of seurat preprocessing dirs
-    val seur_sel           // list of sample names for seurat
-    val species_name       // species display name
-    val publish_dir
+    tuple val(cellranger_dirs), val(cellranger_sel), val(seur_dirs), val(seur_sel), val(species_name), val(publish_dir)
 
     output:
     path "summary.html", emit: summary_html

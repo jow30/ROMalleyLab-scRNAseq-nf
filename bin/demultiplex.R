@@ -148,9 +148,10 @@ if(demux_matrix) {
       project = sample,
       assay = "RNA"
     )
-    if(!dir.exists(sp_dir)) {dir.create(sp_dir, recursive = T)}
+    if(dir.exists(sp_dir)) { unlink(sp_dir, recursive = TRUE) }
+    dir.create(dirname(sp_dir), recursive = TRUE, showWarnings = FALSE)
     write10xCounts(
-      sp_dir, overwrite = T,
+      sp_dir,
       GetAssayData(sp_seur_obj, assay="RNA", layer="counts"),
       gene.id = rownames(sp_seur_obj),
       gene.symbol = rownames(sp_seur_obj),

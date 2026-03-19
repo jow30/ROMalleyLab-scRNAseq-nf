@@ -13,21 +13,17 @@
 
 nextflow.enable.dsl = 2
 
-// ── Module includes ─────────────────────────────────────────────────────────
+// ── Module includes (reference preparation only) ─────────────────────────────
 
-include { GFF_TO_GTF; CELLRANGER_MKGTF; CELLRANGER_MKREF; CELLRANGER_MKREF_MULTI } from './modules/ref_prep'
-include { CELLRANGER_COUNT }          from './modules/cellranger'
-include { PREPROCESS_INITIAL; DEMULTIPLEX; DEMUX_BAM; PREPROCESS_DEMUX } from './modules/preprocess'
-include { SEPARATE_READS; COUNT_READS_2KB } from './modules/read_counts'
-include {
-    SEPARATE_READS as SEPARATE_READS_MULTI;
-    COUNT_READS_2KB as COUNT_READS_2KB_MULTI
-} from './modules/read_counts'
-include { VELOCYTO_RUN; UNSPLICE_RATIO; VELOCYTO_RUN_MULTI; UNSPLICE_RATIO_MULTI } from './modules/velocyto'
-include { PREPROCESS_WITH_VELOCYTO; PREPROCESS_WITH_VELOCYTO_FOR_SPECIES } from './modules/preprocess_velocyto'
-include { SUMMARY_REPORT }                 from './modules/summary'
-include { SUMMARY_REPORT as SUMMARY_REPORT_MULTI } from './modules/summary'
-include { INTEGRATION }                    from './modules/integration'
+include { GFF_TO_GTF }            from './modules/local/gff_to_gtf'
+include { CELLRANGER_MKGTF }      from './modules/local/cellranger_mkgtf'
+include { CELLRANGER_MKREF }      from './modules/local/cellranger_mkref'
+include { CELLRANGER_MKREF_MULTI } from './modules/local/cellranger_mkref_multi'
+
+// ── Workflow includes ────────────────────────────────────────────────────────
+
+include { SINGLE_SPECIES_WF } from './workflows/single_species'
+include { MULTI_SPECIES_WF }  from './workflows/multi_species'
 
 // ── Help message ────────────────────────────────────────────────────────────
 
@@ -70,8 +66,15 @@ def helpMessage() {
       --ambient_rate_max              Max ambient rate (default: 0.5)
       --multiple_species_per_droplet  Allow multi-species droplets (default: true)
 
+    Read counting:
+      --bin_size        Genomic window size (bp) for bamCoverage read counting (default: 2000)
+
     Integration:
       --nFeatures       Number of integration features (default: 3000)
+
+    Cleanup:
+      --cleanup         Remove large intermediate files (*.bam, *.bai, *.loom) from
+                        the output directory after successful pipeline completion (default: false)
 
     """.stripIndent()
 }
@@ -307,318 +310,26 @@ def resolveReference(species_list) {
     }
 }
 
-// ── Resolve annotation references for a species ────────────────────────────
+// ── Resolve per-species annotation, GTF, and integration references ─────────
 
-def resolveAnnotationRefs(species_name) {
-    def sp_key = species_name.replaceAll('_', ' ')
+def resolveSpeciesInfo(species_name) {
+    def sp_key   = species_name.replaceAll('_', ' ')
     def ref_info = params.species_map.containsKey(sp_key) ? params.species_map[sp_key] : null
     return [
-        markers:    ref_info?.markers ?: '',
+        gtf:        ref_info?.gtf        ?: (params.gtf ?: ''),
+        markers:    ref_info?.markers    ?: '',
         seurat_ref: ref_info?.seurat_ref ?: ''
     ]
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SINGLE-SPECIES WORKFLOW
+// MAIN WORKFLOW
 // ═══════════════════════════════════════════════════════════════════════════
-
-workflow SINGLE_SPECIES_WF {
-    take:
-        sample_ch          // [ sample_id, fastq_dir, fastq_prefix ]
-        transcriptome_ch   // path to cellranger reference
-        species_name       // string
-
-    main:
-        def preprocess_dir = "${params.out}/preprocess"
-        def species_dir    = species_name.replaceAll(' ', '_')
-        def sp_info        = params.species_map[species_name]
-        def gtf_path       = sp_info ? sp_info.gtf : params.gtf
-        if (!gtf_path) {
-            log.error "ERROR: Cannot determine GTF file for velocyto. Provide --gtf or add species '${species_name}' to species_map."
-            exit 1
-        }
-        def gtf_file = file(gtf_path)
-
-        // Step 4: CellRanger count
-        CELLRANGER_COUNT(sample_ch, transcriptome_ch)
-
-        // Step 5: Initial preprocess (DIEM only, no velocyto)
-        // Pass absolute path strings (not file objects) since PREPROCESS_INITIAL uses val inputs
-        def cr_outs_ch = CELLRANGER_COUNT.out.cellranger_out.map { sid, dir ->
-            [sid, "${dir.toAbsolutePath()}/outs"]
-        }
-        PREPROCESS_INITIAL(cr_outs_ch, species_name, preprocess_dir)
-
-        // Step 6: Separate reads and count in 2kb windows
-        def bam_ch = CELLRANGER_COUNT.out.cellranger_out.map { sid, dir ->
-            [sid, file("${dir}/outs/possorted_genome_bam.bam")]
-        }
-        SEPARATE_READS(bam_ch, preprocess_dir)
-
-        def all_bams_ch = SEPARATE_READS.out.mapped_bam.map { sid, bam -> [sid, 'mapped', bam] }
-            .mix(
-                SEPARATE_READS.out.uniq_bam.map   { sid, bam -> [sid, 'uniq', bam] },
-                SEPARATE_READS.out.multi_bam.map  { sid, bam -> [sid, 'multi', bam] }
-            )
-        COUNT_READS_2KB(all_bams_ch, preprocess_dir)
-
-        // Step 7: Velocyto
-        def velocyto_input_ch = CELLRANGER_COUNT.out.cellranger_out
-            .join(PREPROCESS_INITIAL.out.barcodes)
-            .map { sid, cr_dir, barcode_file -> [sid, cr_dir, barcode_file] }
-
-        VELOCYTO_RUN(velocyto_input_ch, gtf_file, "${params.out}/cellranger")
-        UNSPLICE_RATIO(VELOCYTO_RUN.out.loom, preprocess_dir)
-
-        // Step 8: Full preprocess with velocyto
-        // Join velocyto txt and the 4 RDS files from PREPROCESS_INITIAL so Nextflow
-        // stages them into the PREPROCESS_WITH_VELOCYTO work directory.
-        def preprocess_velo_ch = UNSPLICE_RATIO.out.unsplice_txt
-            .join(PREPROCESS_INITIAL.out.seur_objs)
-            .join(PREPROCESS_INITIAL.out.summary_dims)
-            .join(PREPROCESS_INITIAL.out.summary_tbs)
-            .join(PREPROCESS_INITIAL.out.summary_plts)
-            .map { sid, velo_txt, seur_objs, summary_dims, summary_tbs, summary_plts ->
-                [sid, velo_txt.toAbsolutePath().toString(),
-                 seur_objs, summary_dims, summary_tbs, summary_plts]
-            }
-
-        PREPROCESS_WITH_VELOCYTO(preprocess_velo_ch, species_name, preprocess_dir)
-
-        // Step 9: Summary report
-        // Must run AFTER step 8 (PREPROCESS_WITH_VELOCYTO). Derive seur_sels_ch from its
-        // output so Nextflow waits for all preprocessing before scheduling the report.
-        def cr_dirs_ch = CELLRANGER_COUNT.out.cellranger_out
-            .map { sid, dir -> dir.toAbsolutePath().toString() }
-            .collect()
-        def cr_sels_ch = CELLRANGER_COUNT.out.cellranger_out
-            .map { sid, dir -> sid }
-            .collect()
-        def seur_sels_ch = PREPROCESS_WITH_VELOCYTO.out.seur_clean
-            .map { sid, rds -> sid }
-            .collect()
-
-        SUMMARY_REPORT(
-            cr_dirs_ch,
-            cr_sels_ch,
-            [file(preprocess_dir).toAbsolutePath().toString()],
-            seur_sels_ch,
-            species_name,
-            preprocess_dir
-        )
-
-        // Step 10: Integration
-        def rds_paths_ch = PREPROCESS_WITH_VELOCYTO.out.seur_clean
-            .map { sid, rds -> rds.toAbsolutePath().toString() }
-            .collect()
-
-        def anno = resolveAnnotationRefs(species_name)
-        INTEGRATION(rds_paths_ch, anno.markers, anno.seurat_ref, "${params.out}/integration")
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// MULTI-SPECIES WORKFLOW
-// ═══════════════════════════════════════════════════════════════════════════
-
-workflow MULTI_SPECIES_WF {
-    take:
-        sample_ch          // [ sample_id, fastq_dir, fastq_prefix ]
-        transcriptome_ch   // path to cellranger reference
-        species_list       // list of species names
-        clean_method       // 'diem' or 'chi'
-
-    main:
-        def species_csv   = species_list.join(',')
-        def preprocess_base = "${params.out}/preprocess"
-
-        // Step 4: CellRanger count
-        CELLRANGER_COUNT(sample_ch, transcriptome_ch)
-
-        // Step 5: Demultiplex
-        // Pass absolute path strings since DEMULTIPLEX and DEMUX_BAM use val inputs
-        def cr_outs_ch = CELLRANGER_COUNT.out.cellranger_out.map { sid, dir ->
-            [sid, "${dir.toAbsolutePath()}/outs"]
-        }
-        DEMULTIPLEX(cr_outs_ch, species_csv, species_list)
-        DEMUX_BAM(cr_outs_ch, species_list)
-
-        // If diem, run preprocess on demultiplexed matrices
-        if (clean_method == 'diem') {
-            // Create [sample, species_dir, matrix_dir] channel from demux outputs
-            // preprocess.R expects the directory CONTAINING raw_feature_bc_matrix
-            // (it appends "/raw_feature_bc_matrix" itself). Use the published absolute path.
-            def demux_preprocess_input = DEMULTIPLEX.out.demux_matrices
-                .flatMap { sid, dirs ->
-                    def entries = []
-                    for (sp in species_list) {
-                        def sp_dir = sp.replaceAll(' ', '_')
-                        def any_match = (dirs instanceof List ? dirs : [dirs]).any { it.toString().contains(sp_dir) }
-                        if (any_match) {
-                            // Pass the parent directory that contains raw_feature_bc_matrix
-                            def matrix_parent = file("${params.out}/preprocess/${sp_dir}/${sid}").toAbsolutePath().toString()
-                            entries << [sid, sp_dir, matrix_parent]
-                        }
-                    }
-                    return entries
-                }
-
-            def publish_dirs = demux_preprocess_input.map { sid, sp, dir ->
-                "${preprocess_base}/${sp}"
-            }
-            PREPROCESS_DEMUX(demux_preprocess_input, publish_dirs)
-        }
-
-        // Step 6: Separate and count reads per species
-        // Flatten demuxed BAMs into [sample_id, species_dir, bam]
-        def demux_bams_flat = DEMUX_BAM.out.demux_bams
-            .flatMap { sid, bams ->
-                def entries = []
-                for (sp in species_list) {
-                    def sp_dir = sp.replaceAll(' ', '_')
-                    for (b in (bams instanceof List ? bams : [bams])) {
-                        if (b.toString().contains(sp_dir)) {
-                            entries << ["${sp_dir}_${sid}", b]
-                        }
-                    }
-                }
-                return entries
-            }
-
-        SEPARATE_READS_MULTI(demux_bams_flat, preprocess_base)
-
-        def all_bams_multi = SEPARATE_READS_MULTI.out.mapped_bam.map { sid, bam -> [sid, 'mapped', bam] }
-            .mix(
-                SEPARATE_READS_MULTI.out.uniq_bam.map   { sid, bam -> [sid, 'uniq', bam] },
-                SEPARATE_READS_MULTI.out.multi_bam.map  { sid, bam -> [sid, 'multi', bam] }
-            )
-        COUNT_READS_2KB_MULTI(all_bams_multi, preprocess_base)
-
-        // Step 7: Velocyto per species
-        // Build a single channel: [sp_dir, sample_id, bam, bam_index, barcodes, gtf]
-        // VELOCYTO_RUN_MULTI uses direct BAM files (no outs/ subdirectory).
-        def multi_velo_ch = Channel.empty()
-        for (sp in species_list) {
-            def sp_dir  = sp.replaceAll(' ', '_')
-            def sp_info = params.species_map[sp]
-            def sp_gtf  = file(sp_info.gtf)
-
-            def sp_bam_ch = DEMUX_BAM.out.demux_bams
-                .flatMap { sid, bams ->
-                    (bams instanceof List ? bams : [bams])
-                        .findAll { it.toString().contains("${sp_dir}/") }
-                        .collect { [sid, it] }
-                }
-            def sp_bai_ch = DEMUX_BAM.out.demux_bam_indices
-                .flatMap { sid, bais ->
-                    (bais instanceof List ? bais : [bais])
-                        .findAll { it.toString().contains("${sp_dir}/") }
-                        .collect { [sid, it] }
-                }
-
-            def barcodes_ch
-            if (clean_method == 'diem') {
-                barcodes_ch = PREPROCESS_DEMUX.out.barcodes
-                    .filter { sid, sp_name, bc -> sp_name == sp_dir }
-                    .map    { sid, sp_name, bc -> [sid, bc] }
-            } else {
-                barcodes_ch = DEMULTIPLEX.out.barcodes
-                    .flatMap { sid, bcs ->
-                        (bcs instanceof List ? bcs : [bcs])
-                            .findAll { it.toString().contains("${sp_dir}/") }
-                            .collect { [sid, it] }
-                    }
-            }
-
-            def sp_velo_ch = sp_bam_ch
-                .join(sp_bai_ch)
-                .join(barcodes_ch)
-                .map { sid, bam, bai, bc -> [sp_dir, sid, bam, bai, bc, sp_gtf] }
-
-            multi_velo_ch = multi_velo_ch.mix(sp_velo_ch)
-        }
-
-        VELOCYTO_RUN_MULTI(multi_velo_ch, preprocess_base)
-        UNSPLICE_RATIO_MULTI(VELOCYTO_RUN_MULTI.out.loom, preprocess_base)
-
-        // Step 8: Full preprocess with velocyto for each species/sample
-        // Join the 4 RDS files from PREPROCESS_DEMUX (diem) so Nextflow stages them
-        // into the PREPROCESS_WITH_VELOCYTO_FOR_SPECIES work directory.
-        def preprocess_multi_ch
-        if (clean_method == 'diem') {
-            // PREPROCESS_DEMUX.out keys are [sample_id, sp_dir]; remap to [sp_dir, sample_id]
-            def demux_seur_objs_ch    = PREPROCESS_DEMUX.out.seur_objs.map    { sid, sp, rds -> [sp, sid, rds] }
-            def demux_summary_dims_ch = PREPROCESS_DEMUX.out.summary_dims.map { sid, sp, rds -> [sp, sid, rds] }
-            def demux_summary_tbs_ch  = PREPROCESS_DEMUX.out.summary_tbs.map  { sid, sp, rds -> [sp, sid, rds] }
-            def demux_summary_plts_ch = PREPROCESS_DEMUX.out.summary_plts.map { sid, sp, rds -> [sp, sid, rds] }
-
-            preprocess_multi_ch = UNSPLICE_RATIO_MULTI.out.unsplice_txt
-                .join(demux_seur_objs_ch,    by: [0, 1])
-                .join(demux_summary_dims_ch, by: [0, 1])
-                .join(demux_summary_tbs_ch,  by: [0, 1])
-                .join(demux_summary_plts_ch, by: [0, 1])
-                .map { sp_dir, sid, txt, seur_objs, summary_dims, summary_tbs, summary_plts ->
-                    def sp = species_list.find { it.replaceAll(' ', '_') == sp_dir }
-                    def velo_path = file("${preprocess_base}/${sp_dir}/${sid}.txt").toAbsolutePath().toString()
-                    [sp_dir, sid, sp, velo_path, seur_objs, summary_dims, summary_tbs, summary_plts]
-                }
-        } else {
-            // chi: PREPROCESS_DEMUX is not run; RDS files must be provided from elsewhere.
-            // For now this path remains unsupported and will fail at channel build time.
-            preprocess_multi_ch = UNSPLICE_RATIO_MULTI.out.unsplice_txt
-                .map { sp_dir, sid, txt ->
-                    def sp = species_list.find { it.replaceAll(' ', '_') == sp_dir }
-                    def velo_path = file("${preprocess_base}/${sp_dir}/${sid}.txt").toAbsolutePath().toString()
-                    [sp_dir, sid, sp, velo_path]
-                }
-        }
-        PREPROCESS_WITH_VELOCYTO_FOR_SPECIES(preprocess_multi_ch, preprocess_base)
-
-        // Steps 9-10: Summary and integration per species
-        def cr_dirs_ch = CELLRANGER_COUNT.out.cellranger_out
-            .map { sid, dir -> dir.toAbsolutePath().toString() }
-            .collect()
-        def cr_sels_ch = CELLRANGER_COUNT.out.cellranger_out
-            .map { sid, dir -> sid }
-            .collect()
-
-        for (sp in species_list) {
-            def sp_dir         = sp.replaceAll(' ', '_')
-            def sp_preprocess  = "${preprocess_base}/${sp_dir}"
-
-            // Step 9: Summary report for this species.
-            // seur_sels_ch is derived from PREPROCESS_WITH_VELOCYTO_FOR_SPECIES outputs
-            // so Nextflow waits for all preprocessing (steps 5-8) before running the report.
-            def sp_seur_sels_ch = PREPROCESS_WITH_VELOCYTO_FOR_SPECIES.out.seur_clean
-                .filter { sp_d, sid, rds -> sp_d == sp_dir }
-                .map    { sp_d, sid, rds -> sid }
-                .collect()
-
-            SUMMARY_REPORT_MULTI(
-                cr_dirs_ch,
-                cr_sels_ch,
-                [file(sp_preprocess).toAbsolutePath().toString()],
-                sp_seur_sels_ch,
-                sp,
-                sp_preprocess
-            )
-
-            // Step 10: Integration for this species
-            def sp_rds_ch = PREPROCESS_WITH_VELOCYTO_FOR_SPECIES.out.seur_clean
-                .filter { sp_d, sid, rds -> sp_d == sp_dir }
-                .map    { sp_d, sid, rds -> rds.toAbsolutePath().toString() }
-                .collect()
-
-            def anno = resolveAnnotationRefs(sp)
-            INTEGRATION(sp_rds_ch, anno.markers, anno.seurat_ref, "${params.out}/integration/${sp_dir}")
-        }
-}
-
-// ── Main workflow ───────────────────────────────────────────────────────────
 
 workflow {
 
     // Step 1: Validate parameters
-    def validated   = validateParams()
+    def validated    = validateParams()
     def species_list = validated.species_list
     def n_species    = validated.n_species
     def clean_method = validated.clean_method
@@ -637,7 +348,7 @@ workflow {
     """.stripIndent()
 
     // Step 2: Parse samplesheet and create channel
-    def samples = parseSamplesheet(params.input)
+    def samples   = parseSamplesheet(params.input)
     def sample_ch = Channel.from(samples)
 
     // Step 3: Resolve reference
@@ -672,10 +383,42 @@ workflow {
         transcriptome_ch = CELLRANGER_MKREF_MULTI.out.cellranger_ref
     }
 
-    // Route to single-species or multi-species workflow
+    // Step 4+: Route to single-species or multi-species workflow
     if (!is_multi) {
-        SINGLE_SPECIES_WF(sample_ch, transcriptome_ch, species_list[0])
+        def sp   = species_list[0]
+        def info = resolveSpeciesInfo(sp)
+        if (!info.gtf) {
+            log.error "ERROR: Cannot determine GTF file for velocyto. Provide --gtf or add species '${sp}' to species_map."
+            exit 1
+        }
+        SINGLE_SPECIES_WF(
+            sample_ch,
+            transcriptome_ch,
+            sp,
+            file(info.gtf),
+            info.markers,
+            info.seurat_ref
+        )
     } else {
-        MULTI_SPECIES_WF(sample_ch, transcriptome_ch, species_list, clean_method)
+        def anno_map = species_list.collectEntries { sp -> [sp, resolveSpeciesInfo(sp)] }
+        MULTI_SPECIES_WF(
+            sample_ch,
+            transcriptome_ch,
+            species_list,
+            clean_method,
+            anno_map
+        )
+    }
+}
+
+// ── Post-run cleanup ─────────────────────────────────────────────────────────
+
+workflow.onComplete {
+    if (params.cleanup && workflow.success) {
+        log.info "Removing large intermediate files (*.bam, *.bai, *.loom) under ${params.out} ..."
+        ['*.bam', '*.bai', '*.loom'].each { pattern ->
+            ['bash', '-c', "find '${params.out}' -name '${pattern}' -delete"].execute().waitFor()
+        }
+        log.info "Cleanup complete."
     }
 }

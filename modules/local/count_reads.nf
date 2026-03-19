@@ -1,37 +1,11 @@
-/*
- * Read counting module: separate read types and count in 2kb windows
- */
-
-process SEPARATE_READS {
-    label 'process_medium'
-    label 'samtools'
-    publishDir "${publish_dir}", mode: 'copy'
-
-    input:
-    tuple val(sample_id), path(bam_file)
-    val publish_dir
-
-    output:
-    tuple val(sample_id), path("${sample_id}.mapped.bam"), emit: mapped_bam
-    tuple val(sample_id), path("${sample_id}.uniq.bam"),   emit: uniq_bam
-    tuple val(sample_id), path("${sample_id}.multi.bam"),  emit: multi_bam
-
-    script:
-    """
-    samtools view -b -F 4 -@ ${task.cpus} ${bam_file} > ${sample_id}.mapped.bam
-    samtools view -b -q 255 -@ ${task.cpus} ${sample_id}.mapped.bam \
-        -o ${sample_id}.uniq.bam -U ${sample_id}.multi.bam
-    """
-}
-
-process COUNT_READS_2KB {
+process COUNT_READS {
+    tag "${sample_id} (${read_type})"
     label 'process_low'
     label 'deeptools'
     publishDir "${publish_dir}", mode: 'copy'
 
     input:
-    tuple val(sample_id), val(read_type), path(bam_file)
-    val publish_dir
+    tuple val(sample_id), val(read_type), path(bam_file), val(publish_dir)
 
     output:
     tuple val(sample_id), val(read_type), path("${sample_id}.${read_type}.tsv"), emit: count_table
@@ -43,7 +17,7 @@ process COUNT_READS_2KB {
     bamCoverage \\
         -b ${bam_file} \\
         -o ${sample_id}.${read_type}.bedgraph \\
-        --binSize 2000 \\
+        --binSize ${params.bin_size} \\
         --normalizeUsing None \\
         --outFileFormat bedgraph \\
         -p ${task.cpus}

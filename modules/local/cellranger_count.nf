@@ -1,8 +1,5 @@
-/*
- * CellRanger count module
- */
-
 process CELLRANGER_COUNT {
+    tag "${sample_id}"
     label 'process_cellranger'
     label 'cellranger'
     publishDir "${params.out}/cellranger", mode: 'copy'
@@ -25,5 +22,8 @@ process CELLRANGER_COUNT {
         --transcriptome=${transcriptome} \\
         --localcores=${task.cpus} \\
         --localmem=${task.memory.toGiga()}
+
+    grep -q "Pipestance completed successfully!" ${sample_id}/_log \\
+        || { echo "ERROR: CellRanger did not complete successfully for ${sample_id}. Check ${sample_id}/_log for details."; exit 1; }
     """
 }

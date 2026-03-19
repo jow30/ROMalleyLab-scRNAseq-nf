@@ -261,7 +261,7 @@ summary_plts[["After UMI/CP/MT/Gene Filtering"]] <- c(summary_plts[["After UMI/C
 if(opt$remove_doublet){
   invisible(
     capture.output({
-      sweep.res <- paramSweep(seur_diem_velocyto_flts, PCs = 1:30, sct = TRUE, num.cores = opt$threads)
+      sweep.res <- paramSweep(seur_diem_velocyto_flts, PCs = 1:30, sct = TRUE, num.cores = 1)
     })
   )
   sweep.stats <- summarizeSweep(sweep.res)
@@ -372,8 +372,13 @@ seur_objs[["After Doublet Removal"]] <- seur_diem_velocyto_flts_dblt
 # Potential Seurat cluster of doublets ---------------------------
 
 if(opt$remove_doublet){
-  dbl <- scDblFinder::findDoubletClusters(GetAssayData(seur_diem_velocyto_flts_dblt, layer = "counts"), seur_diem_velocyto_flts_dblt$seurat_clusters)
-  write.csv(dbl, paste0("findDoubletClusters_", opt$sample, ".csv"))
+  n_clusters <- length(unique(seur_diem_velocyto_flts_dblt$seurat_clusters))
+  if (n_clusters >= 3) {
+    dbl <- scDblFinder::findDoubletClusters(GetAssayData(seur_diem_velocyto_flts_dblt, layer = "counts"), seur_diem_velocyto_flts_dblt$seurat_clusters)
+    write.csv(dbl, paste0("findDoubletClusters_", opt$sample, ".csv"))
+  } else {
+    cat("###CheckPoint### Only", n_clusters, "cluster(s) detected; skipping findDoubletClusters (requires >= 3).\n")
+  }
 }
 
 # Filtering by number of cluster markers ----------------------------------

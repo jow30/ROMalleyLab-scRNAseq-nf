@@ -95,16 +95,8 @@ saveRDS(seuratObjs.integrated, file.path(resDir, "seuratObjs_integrated.rds"))
 
 # ── Cell annotation (optional, parameterized) ──────────────────────────────
 
-annotation_script <- file.path(dirname(sys.frame(1)$ofile %||% "."), "annotation.R")
-if (!file.exists(annotation_script)) {
-  # Fallback: look in the same directory as this script
-  annotation_script <- file.path(getwd(), "annotation.R")
-}
-if (file.exists(annotation_script)) {
-  source(annotation_script)
-} else {
-  cat("###WARNING### annotation.R not found. Skipping annotation steps.\n")
-}
+.script_dir <- dirname(normalizePath(sub("--file=", "", grep("--file=", commandArgs(FALSE), value = TRUE)[1])))
+source(file.path(.script_dir, "annotation.R"))
 
 # Marker-enrichment annotation
 if (!is.null(opt$markers) && file.exists(opt$markers)) {
@@ -188,63 +180,71 @@ saveRDS(seuratObjs.integrated, file.path(resDir, "seuratObjs_integrated.rds"))
 
 # percentage bar plots of samples in each cluster --------------------------------
 
-init_df <- data.frame(cluster = seuratObjs.integrated$celltype, sample = seuratObjs.integrated$orig.ident)
-trans_df <- dcast(init_df, cluster ~ sample, fun.aggregate = length)
-long_df <- pivot_longer(trans_df, cols = -cluster, names_to = "sample", values_to = "Count")
-long_df <- long_df %>% group_by(cluster) %>% mutate(Percentage = (Count / sum(Count)) * 100)
-wide_df <- long_df %>% select(-Count) %>% pivot_wider(names_from = sample, values_from = Percentage)
+if ("celltype" %in% colnames(seuratObjs.integrated@meta.data)) {
+  init_df <- data.frame(cluster = seuratObjs.integrated$celltype, sample = seuratObjs.integrated$orig.ident)
+  trans_df <- dcast(init_df, cluster ~ sample, fun.aggregate = length)
+  long_df <- pivot_longer(trans_df, cols = -cluster, names_to = "sample", values_to = "Count")
+  long_df <- long_df %>% group_by(cluster) %>% mutate(Percentage = (Count / sum(Count)) * 100)
+  wide_df <- long_df %>% select(-Count) %>% pivot_wider(names_from = sample, values_from = Percentage)
 
-write.csv(trans_df, file = paste0(resDir, "/cell_counts_samples_per_harmony_cluster.csv"))
-write.csv(wide_df, file = paste0(resDir, "/cell_percentage_samples_per_harmony_cluster.csv"))
+  write.csv(trans_df, file = paste0(resDir, "/cell_counts_samples_per_harmony_cluster.csv"))
+  write.csv(wide_df, file = paste0(resDir, "/cell_percentage_samples_per_harmony_cluster.csv"))
 
-long_df$sample <- factor(long_df$sample, levels = unique(long_df$sample))
-sample_color <- brewer.pal(n = 7, name = 'Set2')
-names(sample_color) <- levels(long_df$sample)
+  long_df$sample <- factor(long_df$sample, levels = unique(long_df$sample))
+  sample_color <- brewer.pal(n = 7, name = 'Set2')
+  names(sample_color) <- levels(long_df$sample)
 
-p <- ggplot(long_df, aes(x = cluster, y = Percentage, fill = sample)) +
-  geom_bar(stat = "identity", position = "stack") + # or dodge
-  labs(x = NULL, y = NULL, fill = "Sample") +
-  scale_fill_manual(values = sample_color) +
-  theme(text = element_text(size = 20)) +
-  theme(axis.text = element_text(colour = "black")) +
-  coord_flip()
-ggsave(
-  file.path(resDir, "percentage_barplot_samples_per_harmony_cluster.svg"),
-  p,
-  width = 8,
-  height = 8,
-  units = "in"
-)
+  p <- ggplot(long_df, aes(x = cluster, y = Percentage, fill = sample)) +
+    geom_bar(stat = "identity", position = "stack") +
+    labs(x = NULL, y = NULL, fill = "Sample") +
+    scale_fill_manual(values = sample_color) +
+    theme(text = element_text(size = 20)) +
+    theme(axis.text = element_text(colour = "black")) +
+    coord_flip()
+  ggsave(
+    file.path(resDir, "percentage_barplot_samples_per_harmony_cluster.svg"),
+    p,
+    width = 8,
+    height = 8,
+    units = "in"
+  )
+} else {
+  cat("###CheckPoint### 'celltype' column not found. Skipping celltype barplot.\n")
+}
 
 # percentage bar plots of clusters for each sample --------------------------------
 
-init_df <- data.frame(cluster = seuratObjs.integrated$predicted.id, sample = seuratObjs.integrated$orig.ident)
-trans_df <- dcast(init_df, sample ~ cluster, fun.aggregate = length)
-long_df <- pivot_longer(trans_df, cols = -sample, names_to = "cluster", values_to = "Count")
-long_df <- long_df %>% group_by(sample) %>% mutate(Percentage = (Count / sum(Count)) * 100)
-wide_df <- long_df %>% select(-Count) %>% pivot_wider(names_from = cluster, values_from = Percentage)
+if ("predicted.id" %in% colnames(seuratObjs.integrated@meta.data)) {
+  init_df <- data.frame(cluster = seuratObjs.integrated$predicted.id, sample = seuratObjs.integrated$orig.ident)
+  trans_df <- dcast(init_df, sample ~ cluster, fun.aggregate = length)
+  long_df <- pivot_longer(trans_df, cols = -sample, names_to = "cluster", values_to = "Count")
+  long_df <- long_df %>% group_by(sample) %>% mutate(Percentage = (Count / sum(Count)) * 100)
+  wide_df <- long_df %>% select(-Count) %>% pivot_wider(names_from = cluster, values_from = Percentage)
 
-write.csv(trans_df, file = paste0(resDir, "/cell_counts_harmony_clusters_per_sample.csv"))
-write.csv(wide_df, file = paste0(resDir, "/cell_percentage_harmony_clusters_per_sample.csv"))
+  write.csv(trans_df, file = paste0(resDir, "/cell_counts_harmony_clusters_per_sample.csv"))
+  write.csv(wide_df, file = paste0(resDir, "/cell_percentage_harmony_clusters_per_sample.csv"))
 
-long_df$sample <- factor(long_df$sample, levels = rev(unique(long_df$sample)))
-long_df$cluster <- factor(long_df$cluster, levels = unique(long_df$cluster))
-cluster_color <- c(brewer.pal(n = 13, name = 'Set2'), brewer.pal(n = 13, name = 'Set1'), brewer.pal(n = 13, name = 'Set3'), brewer.pal(n = 13, name = 'Paired'))[1:length(levels(long_df$cluster))]
-names(cluster_color) <- levels(long_df$cluster)
+  long_df$sample <- factor(long_df$sample, levels = rev(unique(long_df$sample)))
+  long_df$cluster <- factor(long_df$cluster, levels = unique(long_df$cluster))
+  cluster_color <- c(brewer.pal(n = 13, name = 'Set2'), brewer.pal(n = 13, name = 'Set1'), brewer.pal(n = 13, name = 'Set3'), brewer.pal(n = 13, name = 'Paired'))[1:length(levels(long_df$cluster))]
+  names(cluster_color) <- levels(long_df$cluster)
 
-p <- ggplot(long_df, aes(x = sample, y = Percentage, fill = cluster)) +
-  geom_bar(stat = "identity", position = "stack") + # or dodge
-  labs(x = NULL, y = NULL, fill = "Celltype") +
-  scale_fill_manual(values = cluster_color) +
-  theme(text = element_text(size = 20)) +
-  theme(axis.text = element_text(colour = "black")) +
-  coord_flip()
-ggsave(
-  file.path(resDir, "percentage_barplot_harmony_clusters_per_sample.svg"),
-  p,
-  width = 10,
-  height = 6,
-  units = "in"
-)
+  p <- ggplot(long_df, aes(x = sample, y = Percentage, fill = cluster)) +
+    geom_bar(stat = "identity", position = "stack") +
+    labs(x = NULL, y = NULL, fill = "Celltype") +
+    scale_fill_manual(values = cluster_color) +
+    theme(text = element_text(size = 20)) +
+    theme(axis.text = element_text(colour = "black")) +
+    coord_flip()
+  ggsave(
+    file.path(resDir, "percentage_barplot_harmony_clusters_per_sample.svg"),
+    p,
+    width = 10,
+    height = 6,
+    units = "in"
+  )
+} else {
+  cat("###CheckPoint### 'predicted.id' column not found. Skipping predicted.id barplot.\n")
+}
 
 
