@@ -65,7 +65,40 @@ names(seuratObjs) <- sapply(seuratObjs, function(x) unique(x$orig.ident)[1])
 features <- SelectIntegrationFeatures(seuratObjs, nfeatures = nFeatures)
 seuratObjs <- PrepSCTIntegration(seuratObjs, anchor.features = features)
 anchors <- FindIntegrationAnchors(seuratObjs, normalization.method = "SCT", anchor.features = features, reduction = "rpca")
-seuratObjs.integrated <- IntegrateData(anchors, normalization.method = "SCT")
+
+# Seurat SCT integration can fail when the number of anchor cells is
+# smaller than k.weight (default: 100). In such cases, retry with a
+# lowered k.weight parsed from Seurat's error message.
+k_weight_initial <- 100
+seuratObjs.integrated <- tryCatch(
+  {
+    IntegrateData(anchors, normalization.method = "SCT", k.weight = k_weight_initial)
+  },
+  error = function(e) {
+    msg <- conditionMessage(e)
+    # Example: "Number of anchor cells is less than k.weight. Consider lowering k.weight to less than 74 ..."
+    if (grepl("Number of anchor cells is less than k\\.weight", msg) || grepl("Number of anchor cells is less than k.weight", msg)) {
+      m <- regmatches(msg, regexec("less than ([0-9]+)", msg))
+      if (length(m) >= 2) {
+        suggested_upper <- as.numeric(m[2])
+        retry_k_weight <- max(suggested_upper - 1, 1)
+      } else {
+        # Fallback when we cannot parse the suggested bound.
+        retry_k_weight <- 50
+      }
+      cat("###WARNING### Seurat::IntegrateData failed with default k.weight =", k_weight_initial, "\n")
+      cat("###WARNING### Retrying with k.weight =", retry_k_weight, " (parsed from error)\n")
+      return(
+        IntegrateData(
+          anchors,
+          normalization.method = "SCT",
+          k.weight = retry_k_weight
+        )
+      )
+    }
+    stop(e)
+  }
+)
 
 seuratObjs.integrated <- RunPCA(seuratObjs.integrated)
 seuratObjs.integrated <- RunUMAP(seuratObjs.integrated, dims = 1:30)
@@ -119,6 +152,9 @@ if (!is.null(opt$seurat_reference) && file.exists(opt$seurat_reference)) {
   if (exists("anchor_transfer_anno")) {
     cat("###CheckPoint### Running anchor-transfer annotation with:", opt$seurat_reference, "\n")
     seur_ref <- readRDS(opt$seurat_reference)
+    seuratObjs.integrated <- UpdateSeuratObject(seuratObjs.integrated)
+    rownames(seuratObjs.integrated) <- gsub("\\.Araport.*$", "", rownames(seuratObjs.integrated))
+    rownames(seuratObjs.integrated) <- gsub("\\.v.*$", "", rownames(seuratObjs.integrated))
     seuratObjs.integrated <- anchor_transfer_anno(seuratObjs.integrated, seur_ref)
     dp <- DimPlot(seuratObjs.integrated, group.by = "predicted.id", label = T, label.size = 3)
     ggsave(file.path(resDir, "UMAP_integration_predicted_id.png"), plot = dp, width = 8, height = 6)
@@ -202,7 +238,7 @@ if ("celltype" %in% colnames(seuratObjs.integrated@meta.data)) {
     theme(axis.text = element_text(colour = "black")) +
     coord_flip()
   ggsave(
-    file.path(resDir, "percentage_barplot_samples_per_harmony_cluster.svg"),
+    file.path(resDir, "percentage_barplot_samples_per_harmony_cluster.png"),
     p,
     width = 8,
     height = 8,
@@ -237,7 +273,7 @@ if ("predicted.id" %in% colnames(seuratObjs.integrated@meta.data)) {
     theme(axis.text = element_text(colour = "black")) +
     coord_flip()
   ggsave(
-    file.path(resDir, "percentage_barplot_harmony_clusters_per_sample.svg"),
+    file.path(resDir, "percentage_barplot_harmony_clusters_per_sample.png"),
     p,
     width = 10,
     height = 6,

@@ -40,6 +40,7 @@ workflow MULTI_SPECIES_WF {
     main:
     def species_csv = species_list.join(',')
     def demux_base  = "${params.out}/demultiplex"
+    def demux_base_abs = file(demux_base).toAbsolutePath().toString()
 
     // ── CellRanger count ──────────────────────────────────────────────────────
     CELLRANGER_COUNT(sample_ch, transcriptome_ch)
@@ -88,8 +89,8 @@ workflow MULTI_SPECIES_WF {
                     def sp_dir_name = mat.parent.parent.parent.parent.name
                     def sp          = species_list.find { it.replaceAll(' ', '_') == sp_dir_name }
                     def display_sp  = sp ?: sp_dir_name.replaceAll('_', ' ')
-                    def matrix_dir  = file("${demux_base}/${sp_dir_name}/cellranger/${sid}/outs").toAbsolutePath().toString()
-                    def pub_dir     = "${demux_base}/${sp_dir_name}/preprocess"
+                    def matrix_dir  = file("${demux_base_abs}/${sp_dir_name}/cellranger/${sid}/outs").toAbsolutePath().toString()
+                    def pub_dir     = "${demux_base_abs}/${sp_dir_name}/preprocess"
                     [sid, sp_dir_name, matrix_dir, display_sp, pub_dir]
                 }
             }
@@ -154,12 +155,12 @@ workflow MULTI_SPECIES_WF {
 
     def preprocess_pub_ch = demux_dirs_flat.map { key, d ->
         def sp_dir_name = d.parent.parent.name
-        [key, "${demux_base}/${sp_dir_name}/preprocess"]
+        [key, "${demux_base_abs}/${sp_dir_name}/preprocess"]
     }
 
     def cellranger_pub_ch = demux_dirs_flat.map { key, d ->
         def sp_dir_name = d.parent.parent.name
-        [key, "${demux_base}/${sp_dir_name}/cellranger"]
+        [key, "${demux_base_abs}/${sp_dir_name}/cellranger"]
     }
 
     // ── Shared downstream subworkflow ─────────────────────────────────────────
@@ -173,6 +174,9 @@ workflow MULTI_SPECIES_WF {
     )
 
     // ── Per-species summary + integration ─────────────────────────────────────
+    // Built with pure channel operators (no `for` loop) so species identity
+    // travels as data — avoids Groovy closure-capture bugs.
+
     def cr_dirs_collected = cr_barrier_ch
         .map { sid, dir -> dir.toAbsolutePath().toString() }
         .collect()
@@ -180,41 +184,46 @@ workflow MULTI_SPECIES_WF {
         .map { sid, dir -> sid }
         .collect()
 
-    def summary_ch     = Channel.empty()
-    def integration_ch = Channel.empty()
+    // Extract [sp_dir, sample_id, rds_path] from CELL_FILTERING output
+    def seur_clean_tagged = PREPROCESS.out.seur_clean
+        .map { key, rds ->
+            def sp_dir = key.tokenize(':::').first()
+            def sid    = key.tokenize(':::').last()
+            [sp_dir, sid, rds]
+        }
 
-    for (sp in species_list) {
-        def sp_dir        = sp.replaceAll(' ', '_')
-        def sp_preprocess = "${demux_base}/${sp_dir}/preprocess"
-        def anno          = anno_map[sp]
+    // Per-species staged dirs for summary.Rmd to scan
+    def sp_seur_dirs_ch = seur_clean_tagged
+        .map { sp_dir, sid, rds -> [sp_dir, rds.toAbsolutePath().parent.toString()] }
+        .groupTuple()
+        .map { sp_dir, dirs -> [sp_dir, dirs.unique()] }
 
-        // Filter to this species; extract plain sample_id from composite key
-        def sp_seur_sels = PREPROCESS.out.seur_clean
-            .filter { key, rds -> key.startsWith("${sp_dir}:::") }
-            .map    { key, rds -> key.tokenize(':::').last() }
-            .collect()
-            .ifEmpty([])
+    // Per-species RDS paths for integration
+    def sp_rds_ch = seur_clean_tagged
+        .map { sp_dir, sid, rds -> [sp_dir, rds.toAbsolutePath().toString()] }
+        .groupTuple()
 
-        def sp_summary = cr_dirs_collected.map { dirs -> [dirs] }
-            .combine(cr_sels_collected.map { sels -> [sels] })
-            .combine(sp_seur_sels.map { sels -> [sels] })
-            .filter { cr_dirs, cr_sels, sp_sels -> !sp_sels.isEmpty() }
-            .map { cr_dirs, cr_sels, sp_sels ->
-                [cr_dirs, cr_sels, [file(sp_preprocess).toAbsolutePath().toString()], sp_sels, sp, sp_preprocess]
-            }
-        summary_ch = summary_ch.mix(sp_summary)
+    // summary_ch — one tuple per species
+    def summary_ch = sp_seur_dirs_ch
+        .map { sp_dir, dirs ->
+            def sp          = species_list.find { it.replaceAll(' ', '_') == sp_dir }
+            def sp_preprocess = "${demux_base_abs}/${sp_dir}/preprocess"
+            [sp_dir, dirs, sp, sp_preprocess]
+        }
+        .combine(cr_dirs_collected.map { dirs -> [dirs] })
+        .combine(cr_sels_collected.map { sels -> [sels] })
+        .map { sp_dir, sp_dirs, sp, sp_preprocess, cr_dirs, cr_sels ->
+            [cr_dirs, cr_sels, sp_dirs, cr_sels, sp, sp_preprocess]
+        }
 
-        def sp_rds = PREPROCESS.out.seur_clean
-            .filter { key, rds -> key.startsWith("${sp_dir}:::") }
-            .map    { key, rds -> rds.toAbsolutePath().toString() }
-            .collect()
-            .ifEmpty([])
-            .filter { rds_list -> rds_list.size() > 1 }
-            .map    { rds_list ->
-                [rds_list, anno.markers, anno.seurat_ref, "${demux_base}/${sp_dir}/integration"]
-            }
-        integration_ch = integration_ch.mix(sp_rds)
-    }
+    // integration_ch — one tuple per species with >1 sample
+    def integration_ch = sp_rds_ch
+        .filter { sp_dir, rds_list -> rds_list.size() > 1 }
+        .map { sp_dir, rds_list ->
+            def sp   = species_list.find { it.replaceAll(' ', '_') == sp_dir }
+            def anno = anno_map[sp]
+            [rds_list, anno.markers, anno.seurat_ref, "${demux_base_abs}/${sp_dir}/integration"]
+        }
 
     SUMMARY_REPORT(summary_ch)
     INTEGRATION(integration_ch)

@@ -20,8 +20,8 @@ workflow SINGLE_SPECIES_WF {
     seurat_ref         // path to Seurat reference RDS, or '' if none
 
     main:
-    def preprocess_dir = "${params.out}/preprocess"
-    def cellranger_dir = "${params.out}/cellranger"
+    def preprocess_dir = file("${params.out}/preprocess").toAbsolutePath().toString()
+    def cellranger_dir = file("${params.out}/cellranger").toAbsolutePath().toString()
 
     // ── CellRanger count ──────────────────────────────────────────────────────
     CELLRANGER_COUNT(sample_ch, transcriptome_ch)
@@ -78,15 +78,19 @@ workflow SINGLE_SPECIES_WF {
     def cr_sels_ch = cr_barrier_ch
         .map { sid, dir -> sid }
         .collect()
-    def seur_sels_ch = PREPROCESS.out.seur_clean
-        .map { sid, rds -> sid }
-        .collect()
 
+    // Staged output dirs from CELL_FILTERING — data dependency + seur_dirs.
+    def seur_dirs_ch = PREPROCESS.out.seur_clean
+        .map { sid, rds -> rds.toAbsolutePath().parent.toString() }
+        .collect()
+        .map { dirs -> dirs.unique() }
+
+    // seur_sel = all sample IDs so the summary covers every sample.
     def summary_ch = cr_dirs_ch.map { dirs -> [dirs] }
         .combine(cr_sels_ch.map { sels -> [sels] })
-        .combine(seur_sels_ch.map { sels -> [sels] })
-        .map { cr_dirs, cr_sels, seur_sels ->
-            [cr_dirs, cr_sels, [file(preprocess_dir).toAbsolutePath().toString()], seur_sels, species_name, preprocess_dir]
+        .combine(seur_dirs_ch.map { dirs -> [dirs] })
+        .map { cr_dirs, cr_sels, seur_dirs ->
+            [cr_dirs, cr_sels, seur_dirs, cr_sels, species_name, preprocess_dir]
         }
     SUMMARY_REPORT(summary_ch)
 
@@ -95,8 +99,9 @@ workflow SINGLE_SPECIES_WF {
         .map { sid, rds -> rds.toAbsolutePath().toString() }
         .collect()
 
+    def integration_dir = file("${params.out}/integration").toAbsolutePath().toString()
     def integration_ch = rds_paths_ch.map { rds_paths ->
-        [rds_paths, markers, seurat_ref, "${params.out}/integration"]
+        [rds_paths, markers, seurat_ref, integration_dir]
     }
     INTEGRATION(integration_ch)
 }

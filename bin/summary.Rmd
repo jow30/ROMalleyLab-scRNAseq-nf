@@ -19,15 +19,15 @@ params:
   title: "scRNA-seq summary report"
   author: "Qiaoshan Lin"
   # the absolute paths to the cellranger output folders
-  cellranger_dir: ["/project/gzy8899/qiaoshan/scRNAseq/experiments/At_Cr_5d_seedling_2025/At_Cr_5d_seedling_LG", "/project/gzy8899/qiaoshan/scRNAseq/experiments/At_Cr_5d_seedling_2025/At_Cr_5d_seedling_XC"]
+  cellranger_dir: ["/scratch/midway3/qiaoshan/work/04/f01da7395bbd0a1b7f8d3045d66454/5Dseedlings-LG","/scratch/midway3/qiaoshan/work/f8/cb4f3c22b62f3c56ebeb4e3f6759ec/5Dseedlings-XC"]
   # select a subset of all available IDs when cellranger_sel is provided (use the IDs specified in previous steps)
-  cellranger_sel: ["At_Cr_5d_seedling_LG", "At_Cr_5d_seedling_XC"]
+  cellranger_sel: ["5Dseedlings-LG", "5Dseedlings-XC"]
   # the absolute paths to the preprocess output folders
-  seur_dir: ["/project/gzy8899/qiaoshan/scRNAseq/experiments/At_Cr_5d_seedling_2025/demultiplex/Arabidopsis_thaliana"]
+  seur_dir: ["/scratch/midway3/qiaoshan/work/68/cb31877b2773e6fbbb017971efb1a1"]
   # select a subset of all available rds files when seur_sel is provided (sample names must be the same as the IDs specified in previous steps)
-  seur_sel: ["At_Cr_5d_seedling_LG"]
+  seur_sel: ["5Dseedlings-LG", "5Dseedlings-XC"]
   # Full scientific name of species (will be used for setting annotation reference)
-  species: "Arabidopsis thaliana"
+  species: "Capsella rubella"
 ---
 
 ```{r setup, include=FALSE}

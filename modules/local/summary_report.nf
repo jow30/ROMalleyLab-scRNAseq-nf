@@ -15,6 +15,7 @@ process SUMMARY_REPORT {
     sr_dirs_r = seur_dirs.collect       { "'" + it + "'" }.join(', ')
     sr_sel_r  = seur_sel.collect        { "'" + it + "'" }.join(', ')
     """
+    mkdir -p '${publish_dir}'
     Rscript -e "rmarkdown::render(
       input = '${projectDir}/bin/summary.Rmd',
       params = list(
@@ -26,7 +27,8 @@ process SUMMARY_REPORT {
         seur_sel = c(${sr_sel_r}),
         species = '${species_name}'
       ),
-      output_file = 'summary.html'
+      output_file = '${publish_dir}/summary.html'
     )"
+    cp '${publish_dir}/summary.html' summary.html
     """
 }
