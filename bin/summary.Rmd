@@ -41,7 +41,8 @@ suppressWarnings(suppressPackageStartupMessages(library(dplyr)))
 suppressWarnings(suppressPackageStartupMessages(library(Seurat)))
 suppressWarnings(suppressPackageStartupMessages(library(Biobase)))
 suppressWarnings(suppressPackageStartupMessages(library(htmltools)))
-
+suppressWarnings(suppressPackageStartupMessages(library(ggplot2)))
+suppressWarnings(suppressPackageStartupMessages(library(scales)))
 ```
 
 # Cellranger Summary
@@ -87,6 +88,122 @@ DT::datatable(metrics_summary_tbs_mrg[,sequencing_cols], rownames = T, options =
 ```{r Step 2.2 - Cellranger Mapping Metrics, echo=FALSE }
 mapping_cols <- colnames(metrics_summary_tbs_mrg)[grep("Reads.Mapped.", colnames(metrics_summary_tbs_mrg))]
 DT::datatable(metrics_summary_tbs_mrg[,mapping_cols], rownames = T, options = list(pageLength = 100, dom = 'tip'))
+```
+
+# Read Counting Per Chromosome
+
+## Count Table
+
+```{r Step 2.3 - Count Table, echo=FALSE, results='asis' }
+
+mapped <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "*.mapped.tsv$", recurse = TRUE)) %>% unlist(use.names = F)
+uniq <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "*.uniq.tsv$", recurse = TRUE)) %>% unlist(use.names = F)
+multi <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "*.multi.tsv$", recurse = TRUE)) %>% unlist(use.names = F)
+
+if (!is.null(params$seur_sel)) {
+  mapped <- lapply(params$seur_sel, function(x) mapped[grep(paste0(x, ".mapped.tsv"), mapped)]) %>% unlist()
+  uniq <- lapply(params$seur_sel, function(x) uniq[grep(paste0(x, ".uniq.tsv"), uniq)]) %>% unlist()
+  multi <- lapply(params$seur_sel, function(x) multi[grep(paste0(x, ".multi.tsv"), multi)]) %>% unlist()
+}
+
+# Read tsv files
+mapped <- lapply(mapped, read.table, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% setNames(basename(mapped))
+uniq <- lapply(uniq, read.table, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% setNames(basename(uniq))
+multi <- lapply(multi, read.table, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% setNames(basename(multi))
+
+# Rank rows by count and add a column of accumulated ratio
+mapped <- lapply(mapped, function(x) {
+  x <- x[order(x$count, decreasing = TRUE), ]
+  x$accumulated_ratio <- cumsum(x$count) / sum(x$count)
+  x
+})
+uniq <- lapply(uniq, function(x) {
+  x <- x[order(x$count, decreasing = TRUE), ]
+  x$accumulated_ratio <- cumsum(x$count) / sum(x$count)
+  x
+})
+multi <- lapply(multi, function(x) {
+  x <- x[order(x$count, decreasing = TRUE), ]
+  x$accumulated_ratio <- cumsum(x$count) / sum(x$count)
+  x
+})
+
+# Calculate the total chloroplast rate and mitochondrial rate of all reads when species is Arabidopsis thaliana
+if (params$species == "Arabidopsis thaliana") {
+  for (sample in params$seur_sel) {
+    mapped_df <- mapped[[paste0(sample, ".mapped.tsv")]]
+    uniq_df <- uniq[[paste0(sample, ".uniq.tsv")]]
+    total_chloroplast_rate <- sum(mapped_df[grep("ChrC", mapped_df[, "chr"]), "count"]) / sum(mapped_df[, "count"])
+    total_mitochondrial_rate <- sum(mapped_df[grep("ChrM", mapped_df[, "chr"]), "count"]) / sum(mapped_df[, "count"])
+    cat(sprintf("Chloroplast rate in all mapped reads: %s\n", total_chloroplast_rate))
+    cat(sprintf("Mitochondrial rate in all mapped reads: %s\n", total_mitochondrial_rate))
+    uniq_chloroplast_rate <- sum(uniq_df[grep("ChrC", uniq_df[, "chr"]), "count"]) / sum(uniq_df[, "count"])
+    uniq_mitochondrial_rate <- sum(uniq_df[grep("ChrM", uniq_df[, "chr"]), "count"]) / sum(uniq_df[, "count"])
+    cat(sprintf("Chloroplast rate in uniquely mapped reads (counted by cellranger): %s\n", uniq_chloroplast_rate))
+    cat(sprintf("Mitochondrial rate in uniquely mapped reads (counted by cellranger): %s\n", uniq_mitochondrial_rate))
+  }
+}
+
+# keep and show the top100 in a table for each sample
+for (sample in params$seur_sel) {
+  cat(sprintf("#### %s\n\n", sample))
+  cat(sprintf("##### Mapped\n\n"))
+  DT::datatable(mapped[[paste0(sample, ".mapped.tsv")]][1:100,], rownames = F, options = list(pageLength = 10, dom = 'tip'))
+  cat(sprintf("##### Uniq\n\n"))
+  DT::datatable(uniq[[paste0(sample, ".uniq.tsv")]][1:100,], rownames = F, options = list(pageLength = 10, dom = 'tip'))
+  cat(sprintf("##### Multi\n\n"))
+  DT::datatable(multi[[paste0(sample, ".multi.tsv")]][1:100,], rownames = F, options = list(pageLength = 10, dom = 'tip'))
+  cat("\n\n")
+}
+
+```
+
+## Count Plot
+
+```{r Step 2.4 - Count Plot, echo=FALSE, results='asis', fig.width=12, fig.height=8 }
+req_cols <- c("start", "end", "count", "chr")
+
+for (sample in params$seur_sel) {
+  cat(sprintf("#### %s\n\n", sample))
+
+  df_m <- mapped[[paste0(sample, ".mapped.tsv")]]
+  df_u <- uniq[[paste0(sample, ".uniq.tsv")]]
+  df_t <- multi[[paste0(sample, ".multi.tsv")]]
+
+  dfs <- list(Mapped = df_m, Uniquely_mapped = df_u, Multi_mapped = df_t)
+  dfs <- Filter(function(d) !is.null(d) && nrow(d) > 0 && all(req_cols %in% colnames(d)), dfs)
+
+  if (length(dfs) > 0) {
+    combined <- do.call(rbind, lapply(names(dfs), function(nm) {
+      d <- dfs[[nm]]
+      d$pos  <- (d$start + d$end) / 2
+      d$type <- nm
+      d
+    }))
+
+    top_chr <- aggregate(count ~ chr, data = combined[combined$type == "Mapped", ], FUN = sum)
+    top_chr <- head(top_chr[order(top_chr$count, decreasing = TRUE), "chr"], 9)
+    combined <- combined[combined$chr %in% top_chr, ]
+    combined$chr <- factor(combined$chr, levels = top_chr)
+
+    p <- ggplot(combined, aes(x = pos, y = count, colour = type)) +
+      geom_line(alpha = 0.8, linewidth = 0.5) +
+      scale_x_continuous(labels = scales::comma) +
+      scale_y_continuous(labels = scales::comma) +
+      scale_colour_manual(values = c(Mapped = "steelblue", Uniquely_mapped = "forestgreen", Multi_mapped = "tomato")) +
+      facet_wrap(~ chr, scales = "free_x") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 6),
+            strip.text = element_text(face = "bold"),
+            legend.position = "top") +
+      labs(title = paste0("Read distribution along chromosomes for ", sample),
+           x = "Position (bp)",
+           y = "Read count",
+           colour = NULL)
+    print(p)
+  }
+  cat("\n\n")
+}
 ```
 
 # Seurat Preprocessing Summary
