@@ -203,7 +203,7 @@ vp <- VlnPlot(seur_diem_velocyto, assay = "RNA", layer = "counts", features = c(
 summary_plts[["After Unspliced Ratio Filtering"]] <- c("Violin"=vp)
 summary_dims[["After Unspliced Ratio Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto), "nGene"=nrow(seur_diem_velocyto))
 summary_tbs[["After Unspliced Ratio Filtering"]] <- do.call(rbind, lapply(seur_diem_velocyto@meta.data[c("total_counts","n_genes","pct.mt","pct.cp","pct.rb","score.debris", "unsplice_ratio")], summary))
-seur_objs[["After Unspliced Ratio Filtering"]] <- seur_diem_velocyto
+# seur_objs[["After Unspliced Ratio Filtering"]] <- seur_diem_velocyto
 
 cat("###CheckPoint### Number of remaining cell barcodes after removing low un-spliced ratio:", ncol(seur_diem_velocyto), "\n")
 check_cells(seur_diem_velocyto, "unspliced ratio filtering", opt$min_cells)
@@ -309,7 +309,7 @@ if(opt$remove_doublet){
 }
 
 summary_tbs[["After UMI/CP/MT/Gene Filtering"]] <- do.call(rbind, lapply(seur_diem_velocyto_flts@meta.data[c("total_counts","n_genes","pct.mt","pct.cp","pct.rb","score.debris", "unsplice_ratio", "score.doublet", "scDblFinder.score")], summary))
-seur_objs[["After UMI/CP/MT/Gene Filtering"]] <- seur_diem_velocyto_flts
+# seur_objs[["After UMI/CP/MT/Gene Filtering"]] <- seur_diem_velocyto_flts
 
 dp1 <- DimPlot(seur_diem_velocyto_flts, group.by = "doubletFinder")
 dp2 <- FeaturePlot(seur_diem_velocyto_flts, features = "score.doublet")
@@ -352,7 +352,10 @@ if(opt$remove_doublet){
   } else {
     cat("###CheckPoint###", "The number of doublets assigned by scDblFinder is 0\n")
   }
-
+  seur_diem <- AddMetaData(seur_diem, metadata = seur_diem_velocyto_flts@meta.data[,c("seurat_clusters","score.doublet","doubletFinder")])
+  seur_diem$seurat_clusters_v1 <- seur_diem$seurat_clusters
+  seur_diem$seurat_clusters <- NULL
+  
   seur_diem_velocyto_flts_dblt <- subset(seur_diem_velocyto_flts, subset = doubletFinder == "Singlet")
   cat("###CheckPoint###", ncol(seur_diem_velocyto_flts_dblt@assays$RNA), " cells left after removing doubletFinder-assigned doublets. \n")
   seur_diem_velocyto_flts_dblt <- subset(seur_diem_velocyto_flts_dblt, subset = scDblFinder.class == "singlet")
@@ -386,7 +389,10 @@ summary_dims[["After Doublet Removal"]] <- c("nCell"=ncol(seur_diem_velocyto_flt
 summary_tbs[["After Doublet Removal"]] <- do.call(rbind, lapply(seur_diem_velocyto_flts_dblt@meta.data[c("total_counts","n_genes","pct.mt","pct.cp","pct.rb","score.debris", "unsplice_ratio", "score.doublet", "scDblFinder.score")], summary))
 
 # saveRDS(seur_diem_velocyto_flts_dblt, paste0("seur_diem_velocyto_flts_dblt_", opt$sample, ".rds"))
-seur_objs[["After Doublet Removal"]] <- seur_diem_velocyto_flts_dblt
+# seur_objs[["After Doublet Removal"]] <- seur_diem_velocyto_flts_dblt
+seurat_clusters_v2 <- seur_diem_velocyto_flts_dblt$seurat_clusters
+names(seurat_clusters_v2) <- colnames(seur_diem_velocyto_flts_dblt)
+seur_diem <- AddMetaData(seur_diem, metadata = seurat_clusters_v2, col.name = "seurat_clusters_v2")
 
 # Potential Seurat cluster of doublets ---------------------------
 
@@ -412,7 +418,7 @@ if(nrow(cluster_markers)<opt$min_nClusterMarker){
   summary_dims[["After Min Cluster Marker Filtering"]] <- summary_dims[["After Doublet Removal"]]
   summary_tbs[["After Min Cluster Marker Filtering"]] <- summary_tbs[["After Doublet Removal"]]
 
-  seur_objs[["After Min Cluster Marker Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
+  # seur_objs[["After Min Cluster Marker Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
 }else{
   cat("###CheckPoint###", "The number of markers for each cluster:\n")
   print(table(cluster_markers$cluster))
@@ -448,7 +454,11 @@ if(nrow(cluster_markers)<opt$min_nClusterMarker){
     summary_dims[["After Min Cluster Marker Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "nGene"=nrow(seur_diem_velocyto_flts_dblt_cls@assays$RNA))
     summary_tbs[["After Min Cluster Marker Filtering"]] <- do.call(rbind, lapply(seur_diem_velocyto_flts_dblt_cls@meta.data[c("total_counts","n_genes","pct.mt","pct.cp","pct.rb","score.debris", "unsplice_ratio", "score.doublet", "scDblFinder.score")], summary))
 
-    seur_objs[["After Min Cluster Marker Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
+    # seur_objs[["After Min Cluster Marker Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
+    seurat_clusters_v3 <- seur_diem_velocyto_flts_dblt_cls$seurat_clusters
+    names(seurat_clusters_v3) <- colnames(seur_diem_velocyto_flts_dblt_cls)
+    seur_diem <- AddMetaData(seur_diem, metadata = seurat_clusters_v3, col.name = "seurat_clusters_v3")
+    
   } else {
     seur_diem_velocyto_flts_dblt_cls <- seur_diem_velocyto_flts_dblt
     cat("###CheckPoint###", "No Cluster removed due to too few markers.\n")
@@ -456,7 +466,7 @@ if(nrow(cluster_markers)<opt$min_nClusterMarker){
     summary_dims[["After Min Cluster Marker Filtering"]] <- summary_dims[["After Doublet Removal"]]
     summary_tbs[["After Min Cluster Marker Filtering"]] <- summary_tbs[["After Doublet Removal"]]
 
-    seur_objs[["After Min Cluster Marker Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
+    # seur_objs[["After Min Cluster Marker Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
   }
 }
 
@@ -528,7 +538,10 @@ if(length(clusters)>1){
 
     summary_dims[["After low-median-UMI/nGene Cluster Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "nGene"=nrow(seur_diem_velocyto_flts_dblt_cls@assays$RNA))
     summary_tbs[["After low-median-UMI/nGene Cluster Filtering"]] <- do.call(rbind, lapply(seur_diem_velocyto_flts_dblt_cls@meta.data[c("total_counts","n_genes","pct.mt","pct.cp","pct.rb","score.debris", "unsplice_ratio", "score.doublet", "scDblFinder.score")], summary))
-    seur_objs[["After low-median-UMI/nGene Cluster Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
+    # seur_objs[["After low-median-UMI/nGene Cluster Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
+    seurat_clusters_v4 <- seur_diem_velocyto_flts_dblt_cls$seurat_clusters
+    names(seurat_clusters_v4) <- colnames(seur_diem_velocyto_flts_dblt_cls)
+    seur_diem <- AddMetaData(seur_diem, metadata = seurat_clusters_v4, col.name = "seurat_clusters_v4")
 
   }else{
     cat("###CheckPoint### No low-median-UMI/nGene cluster detected. \n\n")
@@ -536,7 +549,7 @@ if(length(clusters)>1){
     summary_dims[["After low-median-UMI/nGene Cluster Filtering"]] <- summary_dims[["After Min Cluster Marker Filtering"]]
     summary_tbs[["After low-median-UMI/nGene Cluster Filtering"]] <- summary_tbs[["After Min Cluster Marker Filtering"]]
 
-    seur_objs[["After low-median-UMI/nGene Cluster Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
+    # seur_objs[["After low-median-UMI/nGene Cluster Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
   }
 }else{
   cat("###CheckPoint### Only one cluster. Skip filtering by low-UMI clusters. \n\n")
@@ -544,7 +557,7 @@ if(length(clusters)>1){
   summary_dims[["After low-median-UMI/nGene Cluster Filtering"]] <- summary_dims[["After Min Cluster Marker Filtering"]]
   summary_tbs[["After low-median-UMI/nGene Cluster Filtering"]] <- summary_tbs[["After Min Cluster Marker Filtering"]]
 
-  seur_objs[["After low-median-UMI/nGene Cluster Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
+  # seur_objs[["After low-median-UMI/nGene Cluster Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
 }
 
 
@@ -554,4 +567,7 @@ saveRDS(seur_diem_velocyto_flts_dblt_cls, paste0("seur_clean_", opt$sample, ".rd
 saveRDS(summary_dims, paste0("summary_dims_", opt$sample, ".rds"))
 saveRDS(summary_tbs, paste0("summary_tbs_", opt$sample, ".rds"))
 saveRDS(summary_plts, paste0("summary_plts_", opt$sample, ".rds"))
-saveRDS(seur_objs, paste0("seur_objs_", opt$sample, ".rds"))
+# saveRDS(seur_objs, paste0("seur_objs_", opt$sample, ".rds"))
+
+seur_diem$clean <- Cells(seur_diem) %in% Cells(seur_diem_velocyto_flts_dblt_cls)
+saveRDS(seur_diem, paste0("seur_diem_", opt$sample, ".rds"))
