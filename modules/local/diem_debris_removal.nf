@@ -15,7 +15,7 @@ process DIEM_DEBRIS_REMOVAL {
     tag { sp_dir ? "${sp_dir}/${sample_id}" : sample_id }
     label 'process_medium'
     label 'scrnaseq'
-    publishDir "${publish_dir}", mode: 'copy', saveAs: { fn -> fn.startsWith('summary_') ? null : fn }
+    publishDir "${publish_dir}", mode: 'copy', saveAs: { fn -> fn.startsWith('summary_') || fn.startsWith('seur_diem_barcodes_') ? null : fn }
 
     input:
     tuple val(sample_id), val(sp_dir), val(input_path), val(species_name), val(publish_dir)
@@ -27,7 +27,6 @@ process DIEM_DEBRIS_REMOVAL {
     tuple val(sample_id), val(sp_dir), path("summary_tbs_${sample_id}.rds"),           emit: summary_tbs
     tuple val(sample_id), val(sp_dir), path("summary_plts_${sample_id}.rds"),          emit: summary_plts
     tuple val(sample_id), val(sp_dir), path("summary_opts_${sample_id}.rds"),          emit: summary_opts
-    tuple val(sample_id), val(sp_dir), path("sce_${sample_id}.rds"),                   emit: sce
 
     script:
     """

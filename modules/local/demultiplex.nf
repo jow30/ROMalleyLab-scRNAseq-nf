@@ -2,7 +2,7 @@ process DEMULTIPLEX {
     tag "${sample_id}"
     label 'process_medium'
     label 'scrnaseq'
-    publishDir "${params.out}/demultiplex", mode: 'copy', saveAs: { fn -> fn.tokenize('/').last().startsWith('summary_') ? null : fn }
+    publishDir "${params.out}/demultiplex", mode: 'copy', saveAs: { fn -> def base = fn.tokenize('/').last(); (base.startsWith('summary_') || base.startsWith('seur_diem_barcodes_')) ? null : fn }
 
     input:
     tuple val(sample_id), val(cellranger_outs_path)
