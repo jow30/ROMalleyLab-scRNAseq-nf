@@ -1,0 +1,16 @@
+Arabidopsis thaliana:
+    mitochondrial_pattern: "^ATMG"
+    chloroplast_pattern:   "^ATCG"
+    ribosomal_genes:     "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/ribosomal_genes/canonical_ribosomal_genes.Araport11.447.txt"
+Arabidopsis lyrata:
+    mitochondrial_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/mitochondrial_genes.txt"
+    chloroplast_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/chloroplast_genes.txt"
+    ribosomal_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/ribosomal_genes.txt"
+Brassica oleracea:
+    mitochondrial_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Brassica_oleracea/mitochondrial_genes.txt"
+    chloroplast_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Brassica_oleracea/chloroplast_genes.txt"
+    ribosomal_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Brassica_oleracea/ribosomal_genes.txt"
+Capsella rubella:
+    mitochondrial_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Capsella_rubella/mitochondrial_genes.txt"
+    chloroplast_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Capsella_rubella/chloroplast_genes.txt"
+    ribosomal_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Capsella_rubella/ribosomal_genes.txt"
