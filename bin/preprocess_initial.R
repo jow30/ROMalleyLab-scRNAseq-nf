@@ -227,7 +227,7 @@ sce <- estimate_dbr_score(sce, thresh_genes = diem_min_genes)
 # Evaluate debris scores
 # sm <- summarize_clusters(sce)
 
-saveRDS(sce, file = paste0("sce_", opt$sample, ".rds"))
+# saveRDS(sce, file = paste0("sce_", opt$sample, ".rds"))
 
 p <- plot_clust(sce, feat_x = "total_counts", feat_y = "score.debris", log_x = TRUE, log_y = FALSE, ret = T)
 # ggsave(paste0("diem_clust_plot_total_counts_", opt$sample, ".png"), p, width = 5, height = 5, units = "in")
