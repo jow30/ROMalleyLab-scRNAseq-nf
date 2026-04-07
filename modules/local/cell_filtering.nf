@@ -2,7 +2,7 @@ process CELL_FILTERING {
     tag "${sample_id}"
     label 'process_high'
     label 'scrnaseq'
-    publishDir "${publish_dir}", mode: 'copy'
+    publishDir "${publish_dir}", mode: 'copy', saveAs: { fn -> fn.startsWith('summary_') ? null : fn }
 
     input:
     tuple val(key), val(sample_id), val(species_name), path(velocyto_txt),
@@ -11,7 +11,7 @@ process CELL_FILTERING {
 
     output:
     tuple val(key), path("seur_clean_${sample_id}.rds"),       emit: seur_clean,    optional: true
-    tuple val(key), path("seur_objs_${sample_id}.rds"),        emit: seur_objs,     optional: true
+    tuple val(key), path("seur_diem_${sample_id}.rds"),        emit: seur_diem,     optional: true
     tuple val(key), path("summary_dims_${sample_id}.rds"),     emit: summary_dims,  optional: true
     tuple val(key), path("summary_tbs_${sample_id}.rds"),      emit: summary_tbs,   optional: true
     tuple val(key), path("summary_plts_${sample_id}.rds"),     emit: summary_plts,  optional: true

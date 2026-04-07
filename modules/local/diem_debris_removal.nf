@@ -15,7 +15,7 @@ process DIEM_DEBRIS_REMOVAL {
     tag { sp_dir ? "${sp_dir}/${sample_id}" : sample_id }
     label 'process_medium'
     label 'scrnaseq'
-    publishDir "${publish_dir}", mode: 'copy'
+    publishDir "${publish_dir}", mode: 'copy', saveAs: { fn -> fn.startsWith('summary_') ? null : fn }
 
     input:
     tuple val(sample_id), val(sp_dir), val(input_path), val(species_name), val(publish_dir)

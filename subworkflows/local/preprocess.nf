@@ -115,7 +115,7 @@ workflow PREPROCESS {
 
     emit:
     seur_clean   = CELL_FILTERING.out.seur_clean   // [key, rds]
-    seur_objs    = CELL_FILTERING.out.seur_objs
+    seur_diem    = CELL_FILTERING.out.seur_diem
     summary_dims = CELL_FILTERING.out.summary_dims
     summary_tbs  = CELL_FILTERING.out.summary_tbs
     summary_plts = CELL_FILTERING.out.summary_plts
