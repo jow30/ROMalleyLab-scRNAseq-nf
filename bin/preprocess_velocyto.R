@@ -201,7 +201,7 @@ seur_diem_velocyto <- subset(seur_diem, subset = unsplice_ratio > opt$min_unspli
 vp <- VlnPlot(seur_diem_velocyto, assay = "RNA", layer = "counts", features = c("total_counts", "n_genes", "pct.mt", "pct.cp", "pct.rb", "score.debris", "unsplice_ratio"), pt.size = 0.01, alpha = 0.1, ncol = 7)
 # ggsave(paste0("QC_feature_violin_diem_velocyto_", opt$sample, ".png"), plot = vp, width = 18, height = 7, units = "in")
 summary_plts[["After Unspliced Ratio Filtering"]] <- c("Violin"=vp)
-summary_dims[["After Unspliced Ratio Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto), "nGene"=nrow(seur_diem_velocyto))
+summary_dims[["After Unspliced Ratio Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto), "nGene"=nrow(seur_diem_velocyto), "nUMI"=sum(seur_diem_velocyto@meta.data$total_counts))
 summary_tbs[["After Unspliced Ratio Filtering"]] <- do.call(rbind, lapply(seur_diem_velocyto@meta.data[c("total_counts","n_genes","pct.mt","pct.cp","pct.rb","score.debris", "unsplice_ratio")], summary))
 # seur_objs[["After Unspliced Ratio Filtering"]] <- seur_diem_velocyto
 
@@ -242,7 +242,7 @@ cat("###CheckPoint###", length(cp_genes), "CP genes removed.\n")
 cat("###CheckPoint### Number of genes left after CP/MT gene filtering:", nrow(seur_diem_velocyto_flts), "\n\n")
 check_cells(seur_diem_velocyto_flts, "UMI/CP/MT/Gene filtering", opt$min_cells)
 
-summary_dims[["After UMI/CP/MT/Gene Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto_flts), "nGene"=nrow(seur_diem_velocyto_flts))
+summary_dims[["After UMI/CP/MT/Gene Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto_flts), "nGene"=nrow(seur_diem_velocyto_flts), "nUMI"=sum(seur_diem_velocyto_flts@meta.data$total_counts))
 
 seur_diem_velocyto_flts$total_counts <- Matrix::colSums(GetAssayData(seur_diem_velocyto_flts, assay="RNA", layer="count"))
 seur_diem_velocyto_flts$n_genes <- Matrix::colSums(GetAssayData(seur_diem_velocyto_flts, assay="RNA", layer="count")>0)
@@ -385,7 +385,7 @@ summary_plts[["After Doublet Removal"]] <- c(summary_plts[["After Doublet Remova
 vp <- VlnPlot(seur_diem_velocyto_flts_dblt, assay = "RNA", layer = "counts", features = c("total_counts", "n_genes", "pct.mt", "pct.cp", "pct.rb", "score.debris", "unsplice_ratio", "score.doublet", "scDblFinder.score"), pt.size = 0.01, alpha = 0.1, ncol = 9)
 summary_plts[["After Doublet Removal"]] <- c(summary_plts[["After Doublet Removal"]], "Violin-clusters"=vp)
 
-summary_dims[["After Doublet Removal"]] <- c("nCell"=ncol(seur_diem_velocyto_flts_dblt@assays$RNA), "nGene"=nrow(seur_diem_velocyto_flts_dblt@assays$RNA))
+summary_dims[["After Doublet Removal"]] <- c("nCell"=ncol(seur_diem_velocyto_flts_dblt@assays$RNA), "nGene"=nrow(seur_diem_velocyto_flts_dblt@assays$RNA), "nUMI"=sum(seur_diem_velocyto_flts_dblt@meta.data$total_counts))
 summary_tbs[["After Doublet Removal"]] <- do.call(rbind, lapply(seur_diem_velocyto_flts_dblt@meta.data[c("total_counts","n_genes","pct.mt","pct.cp","pct.rb","score.debris", "unsplice_ratio", "score.doublet", "scDblFinder.score")], summary))
 
 # saveRDS(seur_diem_velocyto_flts_dblt, paste0("seur_diem_velocyto_flts_dblt_", opt$sample, ".rds"))
@@ -451,7 +451,7 @@ if(nrow(cluster_markers)<opt$min_nClusterMarker){
     vp <- VlnPlot(seur_diem_velocyto_flts_dblt_cls, assay = "RNA", layer = "counts", features = c("total_counts", "n_genes", "pct.mt", "pct.cp", "pct.rb", "score.debris", "unsplice_ratio", "score.doublet", "scDblFinder.score"), pt.size = 0.01, alpha = 0.1, ncol = 9)
     summary_plts[["After Min Cluster Marker Filtering"]] <- c(summary_plts[["After Min Cluster Marker Filtering"]], "Violin-clusters"=vp)
 
-    summary_dims[["After Min Cluster Marker Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "nGene"=nrow(seur_diem_velocyto_flts_dblt_cls@assays$RNA))
+    summary_dims[["After Min Cluster Marker Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "nGene"=nrow(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "nUMI"=sum(seur_diem_velocyto_flts_dblt_cls@meta.data$total_counts))
     summary_tbs[["After Min Cluster Marker Filtering"]] <- do.call(rbind, lapply(seur_diem_velocyto_flts_dblt_cls@meta.data[c("total_counts","n_genes","pct.mt","pct.cp","pct.rb","score.debris", "unsplice_ratio", "score.doublet", "scDblFinder.score")], summary))
 
     # seur_objs[["After Min Cluster Marker Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
@@ -536,7 +536,7 @@ if(length(clusters)>1){
     vp <- VlnPlot(seur_diem_velocyto_flts_dblt_cls, assay = "RNA", layer = "counts", features = c("total_counts", "n_genes", "pct.mt", "pct.cp", "pct.rb", "score.debris", "unsplice_ratio", "score.doublet", "scDblFinder.score"), pt.size = 0.01, alpha = 0.1, ncol = 9)
     summary_plts[["After low-median-UMI/nGene Cluster Filtering"]] <- c(summary_plts[["After low-median-UMI/nGene Cluster Filtering"]], "Violin-clusters"=vp)
 
-    summary_dims[["After low-median-UMI/nGene Cluster Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "nGene"=nrow(seur_diem_velocyto_flts_dblt_cls@assays$RNA))
+    summary_dims[["After low-median-UMI/nGene Cluster Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "nGene"=nrow(seur_diem_velocyto_flts_dblt_cls@assays$RNA), "nUMI"=sum(seur_diem_velocyto_flts_dblt_cls@meta.data$total_counts))
     summary_tbs[["After low-median-UMI/nGene Cluster Filtering"]] <- do.call(rbind, lapply(seur_diem_velocyto_flts_dblt_cls@meta.data[c("total_counts","n_genes","pct.mt","pct.cp","pct.rb","score.debris", "unsplice_ratio", "score.doublet", "scDblFinder.score")], summary))
     # seur_objs[["After low-median-UMI/nGene Cluster Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
     seurat_clusters_v4 <- seur_diem_velocyto_flts_dblt_cls$seurat_clusters

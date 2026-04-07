@@ -269,6 +269,17 @@ for (opts in summary_opts) {
 htmltools::tagList(setNames(opts_dt, NULL))
 ```
 
+## Total UMI Count Per Step
+
+```{r Step 3 - Total UMI Count Per Step, echo=FALSE, results='asis' }
+summary_dims_mrg <- do.call(rbind, lapply(summary_dims, function(sample_steps) {
+  sapply(sample_steps, function(v) v["nUMI"])
+}))
+summary_dims_mrg <- as.data.frame(summary_dims_mrg)
+cat("<h5>Total UMI count at each preprocessing step:</h5>\n")
+DT::datatable(summary_dims_mrg, rownames = F, options = list(pageLength = 100, dom = 'tip'))
+```
+
 ## Data Dimensions Per Step
 
 ```{r Step 4 - Data Size Per Step, echo=FALSE, results='asis' }

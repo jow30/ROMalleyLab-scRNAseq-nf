@@ -268,7 +268,7 @@ seur_diem <- subset(seur_diem, subset = score.debris <= opt$min_diem_debris_scor
 cat("###CheckPoint### Number of cell barcodes left after removing debris:", ncol(seur_diem), "\n")
 cat("###CheckPoint### Number of genes left after removing debris:", nrow(seur_diem), "\n\n")
 
-summary_dims[["After DIEM Debris Removal"]] <- c("nCell"=ncol(seur_diem), "nGene"=nrow(seur_diem))
+summary_dims[["After DIEM Debris Removal"]] <- c("nCell"=ncol(seur_diem), "nGene"=nrow(seur_diem), "nUMI"=sum(seur_diem@meta.data$total_counts))
 summary_tbs[["After DIEM Debris Removal"]] <- do.call(rbind, lapply(seur_diem@meta.data[c("total_counts","n_genes","pct.mt","pct.cp","pct.rb","score.debris")], summary))
 
 Project(seur_diem) <- opt$sample
