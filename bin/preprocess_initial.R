@@ -147,7 +147,7 @@ cat("###CheckPoint### ---------\n")
 cat("###CheckPoint### Number of cell barcodes in raw data:", ncol(sce), "\n")
 cat("###CheckPoint### Number of genes in raw data:", nrow(sce), "\n\n")
 
-summary_dims[["Cellranger Raw"]] <- c("nCell"=ncol(sce), "nGene"=nrow(sce))
+summary_dims[["Cellranger Raw"]] <- c("nCell"=ncol(sce), "nGene"=nrow(sce), "nUMI"=sum(sce@droplet_data$total_counts))
 
 if(!is.null(mitochondrial_pattern)) {mt_genes <- grep(pattern=mitochondrial_pattern, x=rownames(sce@gene_data), ignore.case=TRUE, value=TRUE)}
 if(!is.null(chloroplast_pattern)) {cp_genes <- grep(pattern=chloroplast_pattern, x=rownames(sce@gene_data), ignore.case=TRUE, value=TRUE)}

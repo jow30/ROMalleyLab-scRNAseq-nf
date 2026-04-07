@@ -192,9 +192,16 @@ workflow MULTI_SPECIES_WF {
             [sp_dir, sid, rds]
         }
 
-    // Per-species staged dirs for summary.Rmd to scan
+    // Per-species staged dirs for summary.Rmd to scan (CELL_FILTERING + COUNT_READS work dirs)
     def sp_seur_dirs_ch = seur_clean_tagged
         .map { sp_dir, sid, rds -> [sp_dir, rds.toAbsolutePath().parent.toString()] }
+        .mix(
+            PREPROCESS.out.count_tables
+                .map { key, type, tsv ->
+                    def sp_dir = key.tokenize(':::').first()
+                    [sp_dir, tsv.toAbsolutePath().parent.toString()]
+                }
+        )
         .groupTuple()
         .map { sp_dir, dirs -> [sp_dir, dirs.unique()] }
 

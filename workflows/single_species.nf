@@ -79,9 +79,13 @@ workflow SINGLE_SPECIES_WF {
         .map { sid, dir -> sid }
         .collect()
 
-    // Staged output dirs from CELL_FILTERING — data dependency + seur_dirs.
+    // Staged output dirs from CELL_FILTERING + COUNT_READS — data dependency + seur_dirs.
     def seur_dirs_ch = PREPROCESS.out.seur_clean
         .map { sid, rds -> rds.toAbsolutePath().parent.toString() }
+        .mix(
+            PREPROCESS.out.count_tables
+                .map { key, type, tsv -> tsv.toAbsolutePath().parent.toString() }
+        )
         .collect()
         .map { dirs -> dirs.unique() }
 

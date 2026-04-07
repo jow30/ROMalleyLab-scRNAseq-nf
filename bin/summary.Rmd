@@ -128,32 +128,39 @@ multi <- lapply(multi, function(x) {
   x
 })
 
-# Calculate the total chloroplast rate and mitochondrial rate of all reads when species is Arabidopsis thaliana
+organelle_rate <- function(df, pattern) {
+  if (is.null(df) || nrow(df) == 0 || !"chr" %in% colnames(df)) return(NA_real_)
+  idx <- grep(pattern, df[, "chr"])
+  if (length(idx) == 0) return(0)
+  total <- sum(df[, "count"])
+  if (total == 0) return(NA_real_)
+  sum(df[idx, "count"]) / total
+}
+
 if (params$species == "Arabidopsis thaliana") {
   for (sample in params$seur_sel) {
     mapped_df <- mapped[[paste0(sample, ".mapped.tsv")]]
     uniq_df <- uniq[[paste0(sample, ".uniq.tsv")]]
-    total_chloroplast_rate <- sum(mapped_df[grep("ChrC", mapped_df[, "chr"]), "count"]) / sum(mapped_df[, "count"])
-    total_mitochondrial_rate <- sum(mapped_df[grep("ChrM", mapped_df[, "chr"]), "count"]) / sum(mapped_df[, "count"])
-    cat(sprintf("Chloroplast rate in all mapped reads: %s\n", total_chloroplast_rate))
-    cat(sprintf("Mitochondrial rate in all mapped reads: %s\n", total_mitochondrial_rate))
-    uniq_chloroplast_rate <- sum(uniq_df[grep("ChrC", uniq_df[, "chr"]), "count"]) / sum(uniq_df[, "count"])
-    uniq_mitochondrial_rate <- sum(uniq_df[grep("ChrM", uniq_df[, "chr"]), "count"]) / sum(uniq_df[, "count"])
-    cat(sprintf("Chloroplast rate in uniquely mapped reads (counted by cellranger): %s\n", uniq_chloroplast_rate))
-    cat(sprintf("Mitochondrial rate in uniquely mapped reads (counted by cellranger): %s\n", uniq_mitochondrial_rate))
+    cat(sprintf("### %s\n\n", sample))
+    cat(sprintf("- Chloroplast rate in all mapped reads: **%.4f%%**\n", organelle_rate(mapped_df, "ChrC") * 100))
+    cat(sprintf("- Mitochondrial rate in all mapped reads: **%.4f%%**\n", organelle_rate(mapped_df, "ChrM") * 100))
+    cat(sprintf("- Chloroplast rate in uniquely mapped reads: **%.4f%%**\n", organelle_rate(uniq_df, "ChrC") * 100))
+    cat(sprintf("- Mitochondrial rate in uniquely mapped reads: **%.4f%%**\n\n", organelle_rate(uniq_df, "ChrM") * 100))
   }
 }
 
-# keep and show the top100 in a table for each sample
 for (sample in params$seur_sel) {
-  cat(sprintf("#### %s\n\n", sample))
-  cat(sprintf("##### Mapped\n\n"))
-  DT::datatable(mapped[[paste0(sample, ".mapped.tsv")]][1:100,], rownames = F, options = list(pageLength = 10, dom = 'tip'))
-  cat(sprintf("##### Uniq\n\n"))
-  DT::datatable(uniq[[paste0(sample, ".uniq.tsv")]][1:100,], rownames = F, options = list(pageLength = 10, dom = 'tip'))
-  cat(sprintf("##### Multi\n\n"))
-  DT::datatable(multi[[paste0(sample, ".multi.tsv")]][1:100,], rownames = F, options = list(pageLength = 10, dom = 'tip'))
-  cat("\n\n")
+  cat(sprintf("### %s {.tabset}\n\n", sample))
+  for (rtype in list(c("mapped", "Mapped"), c("uniq", "Uniq"), c("multi", "Multi"))) {
+    df <- get(rtype[1])[[paste0(sample, ".", rtype[1], ".tsv")]]
+    cat(sprintf("#### %s\n\n", rtype[2]))
+    if (!is.null(df) && nrow(df) > 0) {
+      cat(as.character(htmltools::tagList(
+        DT::datatable(head(df, 100), rownames = FALSE, options = list(pageLength = 10, dom = 'tip'))
+      )))
+    }
+    cat("\n\n")
+  }
 }
 
 ```
@@ -164,7 +171,7 @@ for (sample in params$seur_sel) {
 req_cols <- c("start", "end", "count", "chr")
 
 for (sample in params$seur_sel) {
-  cat(sprintf("#### %s\n\n", sample))
+  cat(sprintf("### %s\n\n", sample))
 
   df_m <- mapped[[paste0(sample, ".mapped.tsv")]]
   df_u <- uniq[[paste0(sample, ".uniq.tsv")]]
