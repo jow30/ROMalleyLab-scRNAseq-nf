@@ -131,8 +131,7 @@ saveRDS(seuratObjs.integrated, file.path(resDir, "seuratObjs_integrated.rds"))
 
 # ── Cell annotation (optional, parameterized) ──────────────────────────────
 
-.script_dir <- dirname(normalizePath(sub("--file=", "", grep("--file=", commandArgs(FALSE), value = TRUE)[1])))
-source(file.path(.script_dir, "annotation.R"))
+source(Sys.which("annotation.R"))
 
 # Marker-enrichment annotation
 if (!is.null(opt$markers) && file.exists(opt$markers)) {

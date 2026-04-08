@@ -569,9 +569,18 @@ if(length(clusters)>1){
 
 source(Sys.which("annotation.R"))
 
+### The following block is to standardize the gene names in the seurat object for annotation
 seur_diem_velocyto_flts_dblt_cls_anno <- UpdateSeuratObject(seur_diem_velocyto_flts_dblt_cls)
+DefaultAssay(seur_diem_velocyto_flts_dblt_cls_anno) <- "RNA"
 rownames(seur_diem_velocyto_flts_dblt_cls_anno) <- gsub("\\.Araport.*$", "", rownames(seur_diem_velocyto_flts_dblt_cls_anno))
 rownames(seur_diem_velocyto_flts_dblt_cls_anno) <- gsub("\\.v.*$", "", rownames(seur_diem_velocyto_flts_dblt_cls_anno))
+seur_diem_velocyto_flts_dblt_cls_anno <- DietSeurat(seur_diem_velocyto_flts_dblt_cls_anno, assays = "RNA")
+seur_diem_velocyto_flts_dblt_cls_anno <- SCTransform(seur_diem_velocyto_flts_dblt_cls_anno, variable.features.n = opt$nHVG, verbose = FALSE)
+seur_diem_velocyto_flts_dblt_cls_anno <- RunPCA(seur_diem_velocyto_flts_dblt_cls_anno, verbose = FALSE)
+seur_diem_velocyto_flts_dblt_cls_anno <- RunUMAP(seur_diem_velocyto_flts_dblt_cls_anno, dims = 1:30, verbose = FALSE)
+seur_diem_velocyto_flts_dblt_cls_anno <- FindNeighbors(seur_diem_velocyto_flts_dblt_cls_anno, dims = 1:30, verbose = FALSE) # PCA reduction was used
+seur_diem_velocyto_flts_dblt_cls_anno <- FindClusters(seur_diem_velocyto_flts_dblt_cls_anno, verbose = FALSE)
+###
 
 seur_diem <- UpdateSeuratObject(seur_diem)
 rownames(seur_diem) <- gsub("\\.Araport.*$", "", rownames(seur_diem))
