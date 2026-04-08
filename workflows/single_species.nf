@@ -7,7 +7,7 @@ nextflow.enable.dsl = 2
 include { CELLRANGER_COUNT }   from '../modules/local/cellranger_count'
 include { DIEM_DEBRIS_REMOVAL } from '../modules/local/diem_debris_removal'
 include { SUMMARY_REPORT }     from '../modules/local/summary_report'
-include { INTEGRATION }        from '../modules/local/integration'
+// include { INTEGRATION }        from '../modules/local/integration'
 include { PREPROCESS }         from '../subworkflows/local/preprocess'
 
 workflow SINGLE_SPECIES_WF {
@@ -98,14 +98,14 @@ workflow SINGLE_SPECIES_WF {
         }
     SUMMARY_REPORT(summary_ch)
 
-    // ── Integration ───────────────────────────────────────────────────────────
-    def rds_paths_ch = PREPROCESS.out.seur_clean
-        .map { sid, rds -> rds.toAbsolutePath().toString() }
-        .collect()
-
-    def integration_dir = file("${params.out}/integration").toAbsolutePath().toString()
-    def integration_ch = rds_paths_ch.map { rds_paths ->
-        [rds_paths, markers, seurat_ref, integration_dir]
-    }
-    INTEGRATION(integration_ch)
+    // ── Integration (disabled) ────────────────────────────────────────────────
+    // def rds_paths_ch = PREPROCESS.out.seur_clean
+    //     .map { sid, rds -> rds.toAbsolutePath().toString() }
+    //     .collect()
+    //
+    // def integration_dir = file("${params.out}/integration").toAbsolutePath().toString()
+    // def integration_ch = rds_paths_ch.map { rds_paths ->
+    //     [rds_paths, markers, seurat_ref, integration_dir]
+    // }
+    // INTEGRATION(integration_ch)
 }

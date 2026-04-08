@@ -25,7 +25,7 @@ nextflow.enable.dsl = 2
 include { CELLRANGER_COUNT }              from '../modules/local/cellranger_count'
 include { DIEM_DEBRIS_REMOVAL }           from '../modules/local/diem_debris_removal'
 include { SUMMARY_REPORT }               from '../modules/local/summary_report'
-include { INTEGRATION }                  from '../modules/local/integration'
+// include { INTEGRATION }                  from '../modules/local/integration'
 include { DEMULTIPLEX_WF as DEMULTIPLEX } from '../subworkflows/local/demultiplex'
 include { PREPROCESS }                   from '../subworkflows/local/preprocess'
 
@@ -205,10 +205,10 @@ workflow MULTI_SPECIES_WF {
         .groupTuple()
         .map { sp_dir, dirs -> [sp_dir, dirs.unique()] }
 
-    // Per-species RDS paths for integration
-    def sp_rds_ch = seur_clean_tagged
-        .map { sp_dir, sid, rds -> [sp_dir, rds.toAbsolutePath().toString()] }
-        .groupTuple()
+    // Per-species RDS paths for integration (disabled)
+    // def sp_rds_ch = seur_clean_tagged
+    //     .map { sp_dir, sid, rds -> [sp_dir, rds.toAbsolutePath().toString()] }
+    //     .groupTuple()
 
     // summary_ch — one tuple per species
     def summary_ch = sp_seur_dirs_ch
@@ -223,15 +223,15 @@ workflow MULTI_SPECIES_WF {
             [cr_dirs, cr_sels, sp_dirs, cr_sels, sp, sp_preprocess]
         }
 
-    // integration_ch — one tuple per species with >1 sample
-    def integration_ch = sp_rds_ch
-        .filter { sp_dir, rds_list -> rds_list.size() > 1 }
-        .map { sp_dir, rds_list ->
-            def sp   = species_list.find { it.replaceAll(' ', '_') == sp_dir }
-            def anno = anno_map[sp]
-            [rds_list, anno.markers, anno.seurat_ref, "${demux_base_abs}/${sp_dir}/integration"]
-        }
+    // integration_ch — one tuple per species with >1 sample (disabled)
+    // def integration_ch = sp_rds_ch
+    //     .filter { sp_dir, rds_list -> rds_list.size() > 1 }
+    //     .map { sp_dir, rds_list ->
+    //         def sp   = species_list.find { it.replaceAll(' ', '_') == sp_dir }
+    //         def anno = anno_map[sp]
+    //         [rds_list, anno.markers, anno.seurat_ref, "${demux_base_abs}/${sp_dir}/integration"]
+    //     }
 
     SUMMARY_REPORT(summary_ch)
-    INTEGRATION(integration_ch)
+    // INTEGRATION(integration_ch)
 }
