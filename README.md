@@ -178,6 +178,50 @@ These parameters only apply when running with multiple species (`--clean chi` is
 
 ---
 
+## Configuring `scQC.yaml`
+
+The file `refs/scQC.yaml` tells the pipeline how to identify organellar and ribosomal genes for each species during QC filtering. You can also point it to a Seurat reference atlas for automated cell-type annotation. Edit this file when you add a new species or need to change organelle definitions.
+
+Each top-level key is a species name (must match `--species` exactly). Under it, provide **one** of two strategies for mitochondrial and chloroplast genes:
+
+### Strategy 1 — Regex patterns (when gene IDs encode organelle origin)
+
+Use this when organellar genes can be identified by a naming prefix (e.g. *A. thaliana* Araport11 uses `ATMG*` / `ATCG*`).
+
+```yaml
+Arabidopsis thaliana:
+    mitochondrial_pattern: "^ATMG"
+    chloroplast_pattern: "^ATCG"
+    ribosomal_genes: "/path/to/ribosomal_genes.txt"
+    annotation_ref_seurat_obj: "/path/to/reference_atlas.RDS"   # optional
+```
+
+### Strategy 2 — Gene list files (when no naming convention exists)
+
+Provide plain-text files with one gene ID per line.
+
+```yaml
+Brassica oleracea:
+    mitochondrial_genes: "/path/to/mitochondrial_genes.txt"
+    chloroplast_genes: "/path/to/chloroplast_genes.txt"
+    ribosomal_genes: "/path/to/ribosomal_genes.txt"
+```
+
+### Field reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mitochondrial_pattern` | regex | Grep pattern to match mitochondrial gene IDs (e.g. `"^ATMG"`) |
+| `chloroplast_pattern` | regex | Grep pattern to match chloroplast gene IDs (e.g. `"^ATCG"`) |
+| `mitochondrial_genes` | file path | One mitochondrial gene ID per line |
+| `chloroplast_genes` | file path | One chloroplast gene ID per line |
+| `ribosomal_genes` | file path | One ribosomal gene ID per line |
+| `annotation_ref_seurat_obj` | file path | Seurat reference RDS with a `celltype` column for anchor-based label transfer (optional) |
+
+> For each species, use **either** the pattern fields **or** the gene-list fields for mitochondria/chloroplast — not both. Ribosomal genes always require a file. The `annotation_ref_seurat_obj` field is optional; if omitted, cell-type annotation is skipped.
+
+---
+
 ## Adding a New Species
 
 Edit `nextflow.config` and add an entry under `params.species_map`:

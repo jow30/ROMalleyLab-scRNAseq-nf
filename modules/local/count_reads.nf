@@ -2,7 +2,7 @@ process COUNT_READS {
     tag "${sample_id} (${read_type})"
     label 'process_low'
     label 'deeptools'
-    publishDir "${publish_dir}", mode: 'copy'
+    publishDir "${publish_dir}/read_counts_in_genomic_bins", mode: 'copy'
 
     input:
     tuple val(key), val(read_type), path(bam_file), val(sample_id), val(publish_dir)

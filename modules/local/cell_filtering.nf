@@ -2,6 +2,7 @@ process CELL_FILTERING {
     tag "${sample_id}"
     label 'process_high'
     label 'scrnaseq'
+    stageInMode 'copy'
     publishDir "${publish_dir}", mode: 'copy', saveAs: { fn -> fn.startsWith('summary_') ? null : fn }
 
     input:
@@ -18,7 +19,9 @@ process CELL_FILTERING {
     tuple val(key), path("summary_opts_${sample_id}.rds"),     emit: summary_opts,  optional: true
 
     script:
+    def script_hash = file("${projectDir}/bin/preprocess_velocyto.R").text.md5()
     """
+    # script_hash: ${script_hash}
     Rscript ${projectDir}/bin/preprocess_velocyto.R \\
         -s ${sample_id} \\
         -S '${species_name}' \\

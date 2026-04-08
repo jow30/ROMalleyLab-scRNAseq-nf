@@ -14,7 +14,9 @@ process SUMMARY_REPORT {
     cr_sel_r  = cellranger_sel.collect  { "'" + it + "'" }.join(', ')
     sr_dirs_r = seur_dirs.collect       { "'" + it + "'" }.join(', ')
     sr_sel_r  = seur_sel.collect        { "'" + it + "'" }.join(', ')
+    def rmd_hash = file("${projectDir}/bin/summary.Rmd").text.md5()
     """
+    # rmd_hash: ${rmd_hash}
     mkdir -p '${publish_dir}'
     Rscript -e "rmarkdown::render(
       input = '${projectDir}/bin/summary.Rmd',

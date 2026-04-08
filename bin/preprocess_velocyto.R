@@ -150,6 +150,11 @@ if (opt$species %in% names(qc_patterns)) {
     cp_genes = readLines(qc_patterns[[opt$species]]$chloroplast_genes)
   }
   ribosomal_genes = readLines(qc_patterns[[opt$species]]$ribosomal_genes)
+  if(!is.null(qc_patterns[[opt$species]]$annotation_ref_seurat_obj)) {
+    seur_ref = readRDS(qc_patterns[[opt$species]]$annotation_ref_seurat_obj)
+  }else{
+    seur_ref = NULL
+  }
 } else {
   stop("###ERROR### This species is absent from the reference yaml. Please add mitochondrial/chloroplast/ribosomal genes to ref.yaml\n")
 }
@@ -560,14 +565,34 @@ if(length(clusters)>1){
   # seur_objs[["After low-median-UMI/nGene Cluster Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
 }
 
+# Annotation -------------------------------------------
+
+source(Sys.which("annotation.R"))
+
+seur_diem_velocyto_flts_dblt_cls_anno <- UpdateSeuratObject(seur_diem_velocyto_flts_dblt_cls)
+rownames(seur_diem_velocyto_flts_dblt_cls_anno) <- gsub("\\.Araport.*$", "", rownames(seur_diem_velocyto_flts_dblt_cls_anno))
+rownames(seur_diem_velocyto_flts_dblt_cls_anno) <- gsub("\\.v.*$", "", rownames(seur_diem_velocyto_flts_dblt_cls_anno))
+
+seur_diem <- UpdateSeuratObject(seur_diem)
+rownames(seur_diem) <- gsub("\\.Araport.*$", "", rownames(seur_diem))
+rownames(seur_diem) <- gsub("\\.v.*$", "", rownames(seur_diem))
+
+if(!is.null(seur_ref)){
+  seur_diem_velocyto_flts_dblt_cls_anno <- anchor_transfer_anno(seur_diem_velocyto_flts_dblt_cls_anno, seur_ref)
+  anchor_anno <- seur_diem_velocyto_flts_dblt_cls_anno$predicted.id
+  names(anchor_anno) <- colnames(seur_diem_velocyto_flts_dblt_cls_anno)
+  seur_diem <- AddMetaData(seur_diem, metadata = anchor_anno, col.name = "anchor_anno")
+}else{
+  cat("No reference atlas provided. Skip anchor-transfer-based annotation. \n")
+}
 
 # saveRDS(seur_diem_velocyto_flts_dblt_cls, paste0("seur_diem_velocyto_flts_dblt_cls_", opt$sample, ".rds"))
-saveRDS(seur_diem_velocyto_flts_dblt_cls, paste0("seur_clean_", opt$sample, ".rds"))
+saveRDS(seur_diem_velocyto_flts_dblt_cls_anno, paste0("seur_clean_", opt$sample, ".rds"))
 
 saveRDS(summary_dims, paste0("summary_dims_", opt$sample, ".rds"))
 saveRDS(summary_tbs, paste0("summary_tbs_", opt$sample, ".rds"))
 saveRDS(summary_plts, paste0("summary_plts_", opt$sample, ".rds"))
 # saveRDS(seur_objs, paste0("seur_objs_", opt$sample, ".rds"))
 
-seur_diem$clean <- Cells(seur_diem) %in% Cells(seur_diem_velocyto_flts_dblt_cls)
+seur_diem$clean <- colnames(seur_diem) %in% colnames(seur_diem_velocyto_flts_dblt_cls_anno)
 saveRDS(seur_diem, paste0("seur_diem_", opt$sample, ".rds"))

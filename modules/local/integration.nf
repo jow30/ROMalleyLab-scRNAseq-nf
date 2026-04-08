@@ -16,7 +16,9 @@ process INTEGRATION {
     rds_csv     = input_rds_paths.join(',')
     markers_arg = markers_file    ? "--markers ${markers_file}" : ''
     ref_arg     = seurat_ref_file ? "--seurat_reference ${seurat_ref_file}" : ''
+    def script_hash = file("${projectDir}/bin/integration.R").text.md5()
     """
+    # script_hash: ${script_hash}
     Rscript ${projectDir}/bin/integration.R \\
         -i "${rds_csv}" \\
         -o . \\

@@ -8,12 +8,13 @@ output:
     df_print: paged
     theme: flatly
     highlight: tango
-    toc: yes
-    toc_depth: 4
+    toc: true
+    toc_depth: 2
     toc_float:
-      collapsed: no
-      smooth_scroll: no
-    number_sections: yes
+      collapsed: true
+      smooth_scroll: false
+    number_sections: true
+    full_width: true
     self_contained: true
 params:
   title: "scRNA-seq summary report"
@@ -30,10 +31,15 @@ params:
   species: "Capsella rubella"
 ---
 
+<style>
+.main-container {
+  max-width: 1600px;
+}
+</style>
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
 ```
-
 
 ```{r Load libraries, echo=FALSE, results='hide' }
 suppressWarnings(suppressPackageStartupMessages(library(fs)))
@@ -151,16 +157,13 @@ if (params$species == "Arabidopsis thaliana") {
 
 for (sample in params$seur_sel) {
   cat(sprintf("### %s {.tabset}\n\n", sample))
-  for (rtype in list(c("mapped", "Mapped"), c("uniq", "Uniq"), c("multi", "Multi"))) {
-    df <- get(rtype[1])[[paste0(sample, ".", rtype[1], ".tsv")]]
-    cat(sprintf("#### %s\n\n", rtype[2]))
-    if (!is.null(df) && nrow(df) > 0) {
-      cat(as.character(htmltools::tagList(
-        DT::datatable(head(df, 100), rownames = FALSE, options = list(pageLength = 10, dom = 'tip'))
-      )))
-    }
-    cat("\n\n")
-  }
+  cat(sprintf("#### All mapped reads\n\n"))
+  print(htmltools::tagList(DT::datatable(mapped[[paste0(sample, ".mapped.tsv")]][1:100,], rownames = F, options = list(pageLength = 10, dom = 'tip'))))
+  cat(sprintf("\n\n#### Uniquely mapped reads\n\n"))
+  print(htmltools::tagList(DT::datatable(uniq[[paste0(sample, ".uniq.tsv")]][1:100,], rownames = F, options = list(pageLength = 10, dom = 'tip'))))
+  cat(sprintf("\n\n#### Multi-mapped reads\n\n"))
+  print(htmltools::tagList(DT::datatable(multi[[paste0(sample, ".multi.tsv")]][1:100,], rownames = F, options = list(pageLength = 10, dom = 'tip'))))
+  cat("\n\n")
 }
 
 ```
@@ -249,7 +252,7 @@ summary_plts <- lapply(summary_plts, readRDS) %>% setNames(seur_basenames)
 
 ```
 
-## Preprocessing Parameters
+## Preprocessing Parameters {.tabset}
 
 ```{r Step 3 - Parameters, echo=FALSE, results='asis' }
 summary_opts <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "summary_opts_.*.rds$", recurse = TRUE)) %>% unlist(use.names = F)
@@ -271,9 +274,14 @@ for (opts in summary_opts) {
     }),
     stringsAsFactors = FALSE
   )
-  opts_dt[[opts$sample]] <- DT::datatable(df, rownames = FALSE, options = list(pageLength = 20))
+  opts_dt[[opts$sample]] <- DT::datatable(df, rownames = FALSE, options = list(pageLength = 20, dom = 'tip'))
 }
-htmltools::tagList(setNames(opts_dt, NULL))
+for (sample in names(opts_dt)) {
+  cat(sprintf("### %s\n\n", sample))
+  print(htmltools::tagList(opts_dt[[sample]]))
+  cat("\n\n")
+}
+# htmltools::tagList(setNames(opts_dt, NULL))
 ```
 
 ## Total UMI Count Per Step
@@ -284,7 +292,7 @@ summary_dims_mrg <- do.call(rbind, lapply(summary_dims, function(sample_steps) {
 }))
 summary_dims_mrg <- as.data.frame(summary_dims_mrg)
 cat("<h5>Total UMI count at each preprocessing step:</h5>\n")
-DT::datatable(summary_dims_mrg, rownames = F, options = list(pageLength = 100, dom = 'tip'))
+DT::datatable(summary_dims_mrg, rownames = T, options = list(pageLength = 100, dom = 'tip'))
 ```
 
 ## Data Dimensions Per Step
@@ -607,41 +615,46 @@ for (n in seq_along(plts)) {
 ```{r Step 7.2 - Cell Annotation Anchor Transfer, echo=FALSE, results='asis', fig.width=18, fig.height=12 }
 source("annotation.R")
 
-if(params$species=="Arabidopsis thaliana"){
-  seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/GSE297576_seurat_object.thaliana_seedling_atlas.RDS")
-}else if(params$species=="Arabidopsis lyrata"){
-  seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/GSE297576_seurat_object.lyrata_seedling_atlas.RDS")
-}else if(params$species=="Capsella rubella"){
-  seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Capsella_rubella/GSE297576_seurat_object.rubella_seedling_atlas.RDS")
-}
+# if(params$species=="Arabidopsis thaliana"){
+#   seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/GSE297576_seurat_object.thaliana_seedling_atlas.RDS")
+# }else if(params$species=="Arabidopsis lyrata"){
+#   seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/GSE297576_seurat_object.lyrata_seedling_atlas.RDS")
+# }else if(params$species=="Capsella rubella"){
+#   seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Capsella_rubella/GSE297576_seurat_object.rubella_seedling_atlas.RDS")
+# }
 
-for (s in seq_along(seur_objs)) {
-  seur_objs[[s]] <- UpdateSeuratObject(seur_objs[[s]])
-  rownames(seur_objs[[s]]) <- gsub("\\.Araport.*$", "", rownames(seur_objs[[s]]))
-  rownames(seur_objs[[s]]) <- gsub("\\.v.*$", "", rownames(seur_objs[[s]]))
-  seur_objs[[s]] <- anchor_transfer_anno(seur_objs[[s]], seur_ref)
-}
+# for (s in seq_along(seur_objs)) {
+#   seur_objs[[s]] <- UpdateSeuratObject(seur_objs[[s]])
+#   rownames(seur_objs[[s]]) <- gsub("\\.Araport.*$", "", rownames(seur_objs[[s]]))
+#   rownames(seur_objs[[s]]) <- gsub("\\.v.*$", "", rownames(seur_objs[[s]]))
+#   seur_objs[[s]] <- anchor_transfer_anno(seur_objs[[s]], seur_ref)
+# }
 
+# check if predicted.id is in the seurat object
 for (n in seq_along(seur_objs)) {
   seur <- seur_objs[[n]]
-  p <- DimPlot(seur, reduction = "umap", label = TRUE, label.size = 5, group.by = "predicted.id") + 
-    ggtitle(paste0("Sample: ", names(seur_objs)[n])) +
-    theme(legend.position = "bottom")
-  # FeaturePlot for prediction scores prediction.score.max
-  p_score <- FeaturePlot(seur, features = "prediction.score.max", reduction = "umap") +
-    ggtitle("Prediction Score")
-  p_out <- p+p_score
-  print(p_out)
-  # print cluster-module overlap table with cell numbers
-  anno_tb <- table(Idents(seur), seur$predicted.id) %>%
-    as.data.frame() %>%
-    tidyr::pivot_wider(names_from = Var2, values_from = Freq, values_fill = 0) %>%
-    dplyr::rename(Cluster = Var1)
-  dt_tag <- htmltools::tagList(
-    htmltools::tags$h5("Number of Cells Per Celltype/Cluster: "),
-    DT::datatable(anno_tb, rownames = FALSE, options = list(pageLength = 100, dom = 'tip')),
-    htmltools::tags$br()
-  )
-  print(dt_tag)
+  if("predicted.id" %in% colnames(seur@meta.data)) {
+    p <- DimPlot(seur, reduction = "umap", label = TRUE, label.size = 5, group.by = "predicted.id") + 
+      ggtitle(paste0("Sample: ", names(seur_objs)[n])) +
+      theme(legend.position = "bottom")
+    # FeaturePlot for prediction scores prediction.score.max
+    p_score <- FeaturePlot(seur, features = "prediction.score.max", reduction = "umap") +
+      ggtitle("Prediction Score")
+    p_out <- p+p_score
+    print(p_out)
+    # print cluster-module overlap table with cell numbers
+    anno_tb <- table(Idents(seur), seur$predicted.id) %>%
+      as.data.frame() %>%
+      tidyr::pivot_wider(names_from = Var2, values_from = Freq, values_fill = 0) %>%
+      dplyr::rename(Cluster = Var1)
+    dt_tag <- htmltools::tagList(
+      htmltools::tags$h5("Number of Cells Per Celltype/Cluster: "),
+      DT::datatable(anno_tb, rownames = FALSE, options = list(pageLength = 100, dom = 'tip')),
+      htmltools::tags$br()
+    )
+    print(dt_tag)
+  }else{
+    cat("No anchor-transfer-based annotation available.\n")
+  }
 }
 ```

@@ -1,11 +1,13 @@
 Arabidopsis thaliana:
     mitochondrial_pattern: "^ATMG"
-    chloroplast_pattern:   "^ATCG"
-    ribosomal_genes:     "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/ribosomal_genes/canonical_ribosomal_genes.Araport11.447.txt"
+    chloroplast_pattern: "^ATCG"
+    ribosomal_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/ribosomal_genes/canonical_ribosomal_genes.Araport11.447.txt"
+    annotation_ref_seurat_obj: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/GSE297576_seurat_object.thaliana_seedling_atlas.RDS"
 Arabidopsis lyrata:
     mitochondrial_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/mitochondrial_genes.txt"
     chloroplast_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/chloroplast_genes.txt"
     ribosomal_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/ribosomal_genes.txt"
+    annotation_ref_seurat_obj: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/GSE297576_seurat_object.lyrata_seedling_atlas.RDS"
 Brassica oleracea:
     mitochondrial_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Brassica_oleracea/mitochondrial_genes.txt"
     chloroplast_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Brassica_oleracea/chloroplast_genes.txt"
@@ -14,3 +16,4 @@ Capsella rubella:
     mitochondrial_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Capsella_rubella/mitochondrial_genes.txt"
     chloroplast_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Capsella_rubella/chloroplast_genes.txt"
     ribosomal_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Capsella_rubella/ribosomal_genes.txt"
+    annotation_ref_seurat_obj: "/project/gzy8899/qiaoshan/scRNAseq/references/Capsella_rubella/GSE297576_seurat_object.rubella_seedling_atlas.RDS"

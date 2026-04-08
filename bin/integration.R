@@ -58,7 +58,10 @@ seuratObjs <- lapply(inputRds_files, function(r) {
   if(!file.exists(r)) {
     stop(paste("Input file not found:", r))
   }
-  readRDS(r)
+  seur <- readRDS(r)
+  DefaultAssay(seur) <- "RNA"
+  seur <- SCTransform(seur, verbose = FALSE)
+  seur
 })
 names(seuratObjs) <- sapply(seuratObjs, function(x) unique(x$orig.ident)[1])
 
