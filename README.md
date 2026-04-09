@@ -1,6 +1,6 @@
 # snRNAseq Processing Pipeline — User Guide
 
-A Nextflow pipeline for processing single-nucleus RNA sequencing data from plants. It runs end-to-end: reference preparation → CellRanger count → read counting → filtering/demultiplexing → summary report → integration.
+A Nextflow pipeline for processing single-nucleus RNA sequencing data from plants. It runs end-to-end: reference preparation → CellRanger count → read counting → filtering/demultiplexing → summary report.
 
 ---
 
@@ -137,12 +137,6 @@ These parameters only apply when running with multiple species (`--clean chi` is
 | `--ambient_rate_max`             | `0.5`   | Maximum ambient RNA rate                       |
 | `--multiple_species_per_droplet` | `true`  | Allow multi-species droplets                   |
 
-### Integration
-
-| Parameter     | Default | Description                          |
-|---------------|---------|--------------------------------------|
-| `--nFeatures` | `3000`  | Number of features for integration   |
-
 ### Cleanup
 
 | Parameter   | Default | Description                          |
@@ -158,8 +152,6 @@ These parameters only apply when running with multiple species (`--clean chi` is
 ├── cellranger/          # CellRanger count outputs per sample
 ├── preprocess/          # Seurat objects, QC plots, and tables
 │   └── <species>/       # (multi-species only) per-species subdirectories
-├── integration/         # Integrated Seurat objects and plots
-│   └── <species>/       # (multi-species only) per-species subdirectories
 └── summary/             # HTML summary report
 ```
 
@@ -174,7 +166,6 @@ These parameters only apply when running with multiple species (`--clean chi` is
 5. **Velocyto** — generates spliced/unspliced RNA velocity loom files
 6. **Full preprocessing** — Seurat-based QC, normalization, clustering, and annotation using velocyto ratios
 7. **Summary report** — HTML report aggregating QC metrics across samples
-8. **Integration** — cross-sample integration using Seurat
 
 ---
 
