@@ -69,9 +69,6 @@ def helpMessage() {
     Read counting:
       --bin_size        Genomic window size (bp) for bamCoverage read counting (default: 2000)
 
-    Integration:
-      --nFeatures       Number of integration features (default: 3000)
-
     Cleanup:
       --cleanup         Remove large intermediate files (*.bam, *.bai, *.loom) from
                         the output directory after successful pipeline completion (default: false)

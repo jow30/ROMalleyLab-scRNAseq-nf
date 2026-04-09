@@ -67,13 +67,6 @@ FASTQ filenames should follow standard Illumina naming: `*_S*_L*_R*_*.fastq.gz`.
 
 The following species have pre-configured references (genome, GTF, CellRanger index, Seurat reference atlas):
 
-| Species                  | Markers available |
-|--------------------------|-------------------|
-| `Arabidopsis thaliana`   | Yes               |
-| `Arabidopsis lyrata`     | No                |
-| `Capsella rubella`       | No                |
-| `Brassica oleracea`      | No                |
-
 Pre-built multi-species cellranger references exist for:
 - `Arabidopsis thaliana,Capsella rubella`
 - `Arabidopsis thaliana,Arabidopsis lyrata,Capsella rubella,Brassica oleracea`
@@ -98,7 +91,7 @@ For any other species, supply `--genome` and `--gtf` manually (see below).
 |------------|--------------------------------------|
 | `--genome` | Path to genome FASTA file            |
 | `--gtf`    | Path to annotation file (`.gtf`, `.gff3`, or `.gff`) |
-| `--ref_yaml` | Path to scQC YAML which contains information about organelles (default: `refs/scQC.yaml`) |
+| `--ref_yaml` | Path to scQC YAML which contains information about organelles and annotation references (default: `refs/scQC.yaml`) |
 
 ### Library QC
 
