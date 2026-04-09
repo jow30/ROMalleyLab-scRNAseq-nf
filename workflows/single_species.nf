@@ -16,8 +16,6 @@ workflow SINGLE_SPECIES_WF {
     transcriptome_ch   // path to cellranger reference
     species_name       // string
     gtf_file           // path to GTF file for velocyto
-    markers            // path to markers CSV, or '' if none
-    seurat_ref         // path to Seurat reference RDS, or '' if none
 
     main:
     def preprocess_dir = file("${params.out}/preprocess").toAbsolutePath().toString()

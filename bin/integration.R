@@ -127,8 +127,6 @@ ggsave(file.path(resDir, "VlnPlot_debris_score_RNA_integration_seurat_clusters.p
 vp <- VlnPlot(seuratObjs.integrated, features = "score.doublet", group.by = "seurat_clusters", pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
 ggsave(file.path(resDir, "VlnPlot_doublet_score_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
 
-saveRDS(seuratObjs.integrated, file.path(resDir, "seuratObjs_integrated.rds"))
-
 # ── Cell annotation (optional, parameterized) ──────────────────────────────
 
 source(Sys.which("annotation.R"))

@@ -29,7 +29,9 @@ process DIEM_DEBRIS_REMOVAL {
     tuple val(sample_id), val(sp_dir), path("summary_opts_${sample_id}.rds"),          emit: summary_opts
 
     script:
+    def script_hash = file("${projectDir}/bin/preprocess_initial.R").text.md5()
     """
+    # script_hash: ${script_hash}
     Rscript ${projectDir}/bin/preprocess_initial.R \\
         -i ${input_path} \\
         -s ${sample_id} \\

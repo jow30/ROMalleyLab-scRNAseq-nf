@@ -409,9 +409,10 @@ for (sp in species_names) {
   set.seed(123)
   
   seur_diem<-seurat_obj
-  summary_dims[["After DIEM Debris Removal"]] <- c("nCell"=ncol(seur_diem), "nGene"=nrow(seur_diem))
   
   seur_diem$total_counts <- seur_diem[[paste0("umi_", gsub(" ", "_", sp))]]
+  summary_dims[["After DIEM Debris Removal"]] <- c("nCell"=ncol(seur_diem), "nGene"=nrow(seur_diem), "nUMI"=sum(seur_diem$total_counts))
+
   seur_diem$n_genes <- Matrix::colSums(Seurat::GetAssayData(seur_diem, assay = "RNA", layer = "counts") > 0)
   if(!is.null(mitochondrial_pattern)) {mt_genes <- grep(pattern=mitochondrial_pattern, x=rownames(seur_diem), ignore.case=TRUE, value=TRUE)}
   if(!is.null(chloroplast_pattern)) {cp_genes <- grep(pattern=chloroplast_pattern, x=rownames(seur_diem), ignore.case=TRUE, value=TRUE)}

@@ -613,22 +613,6 @@ for (n in seq_along(plts)) {
 ## Anchor-Transfer-based Annotated Cell
 
 ```{r Step 7.2 - Cell Annotation Anchor Transfer, echo=FALSE, results='asis', fig.width=18, fig.height=12 }
-source("annotation.R")
-
-# if(params$species=="Arabidopsis thaliana"){
-#   seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/GSE297576_seurat_object.thaliana_seedling_atlas.RDS")
-# }else if(params$species=="Arabidopsis lyrata"){
-#   seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/GSE297576_seurat_object.lyrata_seedling_atlas.RDS")
-# }else if(params$species=="Capsella rubella"){
-#   seur_ref <- readRDS("/project/gzy8899/qiaoshan/scRNAseq/references/Capsella_rubella/GSE297576_seurat_object.rubella_seedling_atlas.RDS")
-# }
-
-# for (s in seq_along(seur_objs)) {
-#   seur_objs[[s]] <- UpdateSeuratObject(seur_objs[[s]])
-#   rownames(seur_objs[[s]]) <- gsub("\\.Araport.*$", "", rownames(seur_objs[[s]]))
-#   rownames(seur_objs[[s]]) <- gsub("\\.v.*$", "", rownames(seur_objs[[s]]))
-#   seur_objs[[s]] <- anchor_transfer_anno(seur_objs[[s]], seur_ref)
-# }
 
 # check if predicted.id is in the seurat object
 for (n in seq_along(seur_objs)) {

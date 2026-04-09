@@ -395,9 +395,7 @@ workflow {
             sample_ch,
             transcriptome_ch,
             sp,
-            file(info.gtf),
-            info.markers,
-            info.seurat_ref
+            file(info.gtf)
         )
     } else {
         def anno_map = species_list.collectEntries { sp -> [sp, resolveSpeciesInfo(sp)] }

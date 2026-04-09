@@ -76,12 +76,12 @@ marker_enrich_anno <- function(seur, marker_file){
   sig_tb <- enrichment_tb %>%
     filter(p_adj < 0.05 & overlap >= 3)
 
-  ggplot(sig_tb, aes(x = cluster, y = module, fill = -log10(p_adj))) +
-    geom_tile(color = "gray70") +
-    scale_fill_viridis_c(option = "B") +
-    theme_minimal() +
-    labs(fill = "-log10(FDR)", x = "Cluster", y = "Module",
-         title = "Module enrichment of cluster marker genes")
+  # ggplot(sig_tb, aes(x = cluster, y = module, fill = -log10(p_adj))) +
+  #   geom_tile(color = "gray70") +
+  #   scale_fill_viridis_c(option = "B") +
+  #   theme_minimal() +
+  #   labs(fill = "-log10(FDR)", x = "Cluster", y = "Module",
+  #        title = "Module enrichment of cluster marker genes")
 
   # For each cluster, pick the module with the smallest FDR
   cluster_module_assign <- enrichment_tb %>%

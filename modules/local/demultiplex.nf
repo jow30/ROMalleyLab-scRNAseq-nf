@@ -17,7 +17,9 @@ process DEMULTIPLEX {
     tuple val(sample_id), path("*/cellranger/*/outs/raw_feature_bc_matrix"),                  emit: demux_matrices
 
     script:
+    def script_hash = file("${projectDir}/bin/demultiplex.R").text.md5()
     """
+    # script_hash: ${script_hash}
     Rscript ${projectDir}/bin/demultiplex.R \\
         -i ${cellranger_outs_path} \\
         -o . \\

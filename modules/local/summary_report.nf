@@ -17,7 +17,6 @@ process SUMMARY_REPORT {
     def rmd_hash = file("${projectDir}/bin/summary.Rmd").text.md5()
     """
     # rmd_hash: ${rmd_hash}
-    mkdir -p '${publish_dir}'
     Rscript -e "rmarkdown::render(
       input = '${projectDir}/bin/summary.Rmd',
       params = list(
@@ -29,8 +28,8 @@ process SUMMARY_REPORT {
         seur_sel = c(${sr_sel_r}),
         species = '${species_name}'
       ),
-      output_file = '${publish_dir}/summary.html'
+      output_dir = getwd(),
+      output_file = 'summary.html'
     )"
-    cp '${publish_dir}/summary.html' summary.html
     """
 }

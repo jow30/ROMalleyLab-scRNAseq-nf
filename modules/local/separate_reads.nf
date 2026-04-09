@@ -2,7 +2,6 @@ process SEPARATE_READS {
     tag "${sample_id}"
     label 'process_medium'
     label 'samtools'
-    publishDir "${publish_dir}", mode: 'copy', enabled: false
 
     input:
     tuple val(key), path(cr_dir), val(sample_id), val(publish_dir)

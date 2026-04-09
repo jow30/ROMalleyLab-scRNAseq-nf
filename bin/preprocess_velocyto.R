@@ -249,8 +249,8 @@ check_cells(seur_diem_velocyto_flts, "UMI/CP/MT/Gene filtering", opt$min_cells)
 
 summary_dims[["After UMI/CP/MT/Gene Filtering"]] <- c("nCell"=ncol(seur_diem_velocyto_flts), "nGene"=nrow(seur_diem_velocyto_flts), "nUMI"=sum(seur_diem_velocyto_flts@meta.data$total_counts))
 
-seur_diem_velocyto_flts$total_counts <- Matrix::colSums(GetAssayData(seur_diem_velocyto_flts, assay="RNA", layer="count"))
-seur_diem_velocyto_flts$n_genes <- Matrix::colSums(GetAssayData(seur_diem_velocyto_flts, assay="RNA", layer="count")>0)
+seur_diem_velocyto_flts$total_counts <- Matrix::colSums(GetAssayData(seur_diem_velocyto_flts, assay="RNA", layer="counts"))
+seur_diem_velocyto_flts$n_genes <- Matrix::colSums(GetAssayData(seur_diem_velocyto_flts, assay="RNA", layer="counts")>0)
 seur_diem_velocyto_flts$pct.mt <- PercentageFeatureSet(seur_diem_velocyto_flts, features = mt_genes, assay = "RNA")
 seur_diem_velocyto_flts$pct.cp <- PercentageFeatureSet(seur_diem_velocyto_flts, features = cp_genes, assay = "RNA")
 seur_diem_velocyto_flts$pct.rb <- PercentageFeatureSet(seur_diem_velocyto_flts, features = ribosomal_genes, assay = "RNA")
@@ -470,7 +470,6 @@ if(nrow(cluster_markers)<opt$min_nClusterMarker){
     summary_plts[["After Min Cluster Marker Filtering"]] <- summary_plts[["After Doublet Removal"]]
     summary_dims[["After Min Cluster Marker Filtering"]] <- summary_dims[["After Doublet Removal"]]
     summary_tbs[["After Min Cluster Marker Filtering"]] <- summary_tbs[["After Doublet Removal"]]
-
     # seur_objs[["After Min Cluster Marker Filtering"]] <- seur_diem_velocyto_flts_dblt_cls
   }
 }
