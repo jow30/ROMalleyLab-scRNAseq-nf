@@ -25,6 +25,12 @@ option_list <- list(
               default = 3000,
               help = "Number of integration features [default = %default]"),
   
+  make_option(c("-m", "--integration_method"),
+              type = "character",
+              default = "RPCA",
+              help = "Integration method to apply [default = %default]",
+              ),
+  
   make_option(c("--markers"),
               type = "character",
               default = NULL,
@@ -38,6 +44,16 @@ option_list <- list(
 
 opt <- parse_args(OptionParser(option_list=option_list))
 
+# options(
+#   inputRds = "/project/gzy8899/qiaoshan/scRNAseq/nextflow/test/single/results/preprocess/seur_clean_control.rds,/project/gzy8899/qiaoshan/scRNAseq/nextflow/test/single/results/preprocess/seur_clean_ABA.rds",
+#   resDir = ".",
+#   nFeatures = 3000,
+#   integration_method = "RPCA",
+#   markers = NULL,
+#   seurat_reference = "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/GSE297576_seurat_object.thaliana_seedling_atlas.RDS"
+# )
+# opt <- options()
+
 required_args <- c("inputRds", "resDir")
 missing <- required_args[ sapply(required_args, function(x) is.null(opt[[x]])) ]
 
@@ -50,6 +66,7 @@ if (length(missing) > 0) {
 resDir <- opt$resDir
 inputRds <- opt$inputRds
 nFeatures <- opt$nFeatures
+integration_method <- opt$integration_method
 
 if (!dir.exists(resDir)) {dir.create(resDir, recursive = TRUE)}
 
@@ -59,75 +76,76 @@ seuratObjs <- lapply(inputRds_files, function(r) {
     stop(paste("Input file not found:", r))
   }
   seur <- readRDS(r)
-  DefaultAssay(seur) <- "RNA"
-  seur <- SCTransform(seur, verbose = FALSE)
   seur
 })
 names(seuratObjs) <- sapply(seuratObjs, function(x) unique(x$orig.ident)[1])
 
-features <- SelectIntegrationFeatures(seuratObjs, nfeatures = nFeatures)
-seuratObjs <- PrepSCTIntegration(seuratObjs, anchor.features = features)
-anchors <- FindIntegrationAnchors(seuratObjs, normalization.method = "SCT", anchor.features = features, reduction = "rpca")
+seuratObjs.integrated <- merge(seuratObjs[[1]], y = seuratObjs[-1])
+options(future.globals.maxSize = 8000 * 1024^2) # set memory limit to 8G
 
-# Seurat SCT integration can fail when the number of anchor cells is
-# smaller than k.weight (default: 100). In such cases, retry with a
-# lowered k.weight parsed from Seurat's error message.
-k_weight_initial <- 100
-seuratObjs.integrated <- tryCatch(
-  {
-    IntegrateData(anchors, normalization.method = "SCT", k.weight = k_weight_initial)
-  },
-  error = function(e) {
-    msg <- conditionMessage(e)
-    # Example: "Number of anchor cells is less than k.weight. Consider lowering k.weight to less than 74 ..."
-    if (grepl("Number of anchor cells is less than k\\.weight", msg) || grepl("Number of anchor cells is less than k.weight", msg)) {
-      m <- regmatches(msg, regexec("less than ([0-9]+)", msg))
-      if (length(m) >= 2) {
-        suggested_upper <- as.numeric(m[2])
-        retry_k_weight <- max(suggested_upper - 1, 1)
-      } else {
-        # Fallback when we cannot parse the suggested bound.
-        retry_k_weight <- 50
-      }
-      cat("###WARNING### Seurat::IntegrateData failed with default k.weight =", k_weight_initial, "\n")
-      cat("###WARNING### Retrying with k.weight =", retry_k_weight, " (parsed from error)\n")
-      return(
-        IntegrateData(
-          anchors,
-          normalization.method = "SCT",
-          k.weight = retry_k_weight
-        )
-      )
-    }
-    stop(e)
-  }
-)
+if(integration_method == "RPCA") {
+  seuratObjs.integrated <- NormalizeData(seuratObjs.integrated)
+  seuratObjs.integrated <- FindVariableFeatures(seuratObjs.integrated)
+  seuratObjs.integrated <- ScaleData(seuratObjs.integrated)
+  seuratObjs.integrated <- RunPCA(seuratObjs.integrated)
+  
+  seuratObjs.integrated <- IntegrateLayers(
+    object = seuratObjs.integrated, method = RPCAIntegration, 
+    orig.reduction = "pca", new.reduction = "integrated.rpca")
+  
+  umap_reduction_name <- "umap.rpca"
+  cluster_name <- "rpca_clusters"
+  seuratObjs.integrated <- FindNeighbors(seuratObjs.integrated, reduction = "integrated.rpca", dims = 1:30)
+  seuratObjs.integrated <- FindClusters(seuratObjs.integrated, graph.name = "RNA_snn", resolution = 0.8, cluster.name = cluster_name)
+  seuratObjs.integrated <- RunUMAP(seuratObjs.integrated, reduction = "integrated.rpca", dims = 1:30, reduction.name = umap_reduction_name)
+}else if (integration_method == "CCA") {
+  seuratObjs.integrated <- NormalizeData(seuratObjs.integrated)
+  seuratObjs.integrated <- FindVariableFeatures(seuratObjs.integrated)
+  seuratObjs.integrated <- ScaleData(seuratObjs.integrated)
+  seuratObjs.integrated <- RunPCA(seuratObjs.integrated)
+  
+  seuratObjs.integrated <- IntegrateLayers(
+    object = seuratObjs.integrated, method = CCAIntegration, 
+    orig.reduction = "pca", new.reduction = "integrated.cca")
+  
+  umap_reduction_name <- "umap.cca"
+  cluster_name <- "cca_clusters"
+  seuratObjs.integrated <- FindNeighbors(seuratObjs.integrated, reduction = "integrated.cca", dims = 1:30)
+  seuratObjs.integrated <- FindClusters(seuratObjs.integrated, graph.name = "RNA_snn", resolution = 0.8, cluster.name = cluster_name)
+  seuratObjs.integrated <- RunUMAP(seuratObjs.integrated, reduction = "integrated.cca", dims = 1:30, reduction.name = umap_reduction_name)
+}else if (integration_method == "harmony") {
+  seuratObjs.integrated <- SCTransform(seuratObjs.integrated)
+  seuratObjs.integrated <- RunPCA(seuratObjs.integrated, reduction.name = "sctpca")
+  
+  seuratObjs.integrated <- IntegrateLayers(
+    object = seuratObjs.integrated, method = HarmonyIntegration, assay = "SCT",
+    orig.reduction = "sctpca", new.reduction = "integrated.harmony")
+  
+  umap_reduction_name <- "umap.harmony"
+  cluster_name <- "harmony_clusters"
+  seuratObjs.integrated <- FindNeighbors(seuratObjs.integrated, reduction = "integrated.harmony", dims = 1:30)
+  seuratObjs.integrated <- FindClusters(seuratObjs.integrated, graph.name = "SCT_snn", resolution = 0.8, cluster.name = cluster_name)
+  seuratObjs.integrated <- RunUMAP(seuratObjs.integrated, reduction = "integrated.harmony", dims = 1:30, reduction.name = umap_reduction_name)
+}
 
-seuratObjs.integrated <- RunPCA(seuratObjs.integrated)
-seuratObjs.integrated <- RunUMAP(seuratObjs.integrated, dims = 1:30)
-seuratObjs.integrated <- FindNeighbors(seuratObjs.integrated, dims = 1:30)
-seuratObjs.integrated <- FindClusters(seuratObjs.integrated, resolution = 0.8)
-
-dp <- DimPlot(seuratObjs.integrated, reduction = "umap", group.by = c("orig.ident"), shuffle = T)
-ggsave(file.path(resDir, "UMAP_integration.png"), plot = dp, width = 6, height = 5)
-dp <- DimPlot(seuratObjs.integrated, reduction = "umap", group.by = c("seurat_clusters"), shuffle = T, label = T)
-ggsave(file.path(resDir, "UMAP_integration_seurat_clusters.png"), plot = dp, width = 6, height = 5)
-vp <- VlnPlot(seuratObjs.integrated, features = "nFeature_RNA", group.by = "seurat_clusters", pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
-ggsave(file.path(resDir, "VlnPlot_nFeature_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
-vp <- VlnPlot(seuratObjs.integrated, features = "nCount_RNA", group.by = "seurat_clusters", pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
-ggsave(file.path(resDir, "VlnPlot_nCount_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
-vp <- VlnPlot(seuratObjs.integrated, features = "pct.mt", group.by = "seurat_clusters", pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
-ggsave(file.path(resDir, "VlnPlot_percentMT_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
-vp <- VlnPlot(seuratObjs.integrated, features = "pct.cp", group.by = "seurat_clusters", pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
-ggsave(file.path(resDir, "VlnPlot_percentCP_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
-vp <- VlnPlot(seuratObjs.integrated, features = "pct.rb", group.by = "seurat_clusters", pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
-ggsave(file.path(resDir, "VlnPlot_percentRP_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
-vp <- VlnPlot(seuratObjs.integrated, features = "score.debris", group.by = "seurat_clusters", pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
-ggsave(file.path(resDir, "VlnPlot_debris_score_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
-vp <- VlnPlot(seuratObjs.integrated, features = "score.doublet", group.by = "seurat_clusters", pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
-ggsave(file.path(resDir, "VlnPlot_doublet_score_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
-
-# ── Cell annotation (optional, parameterized) ──────────────────────────────
+dp <- DimPlot(seuratObjs.integrated, reduction = umap_reduction_name, group.by = c("orig.ident"), shuffle = T)
+ggsave(file.path(resDir, "UMAP_bySample.png"), plot = dp, width = 6, height = 5)
+dp <- DimPlot(seuratObjs.integrated, reduction = umap_reduction_name, group.by = cluster_name, shuffle = T, label = T)
+ggsave(file.path(resDir, "UMAP_byCluster.png"), plot = dp, width = 6, height = 5)
+vp <- VlnPlot(seuratObjs.integrated, features = "nFeature_RNA", group.by = cluster_name, pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
+ggsave(file.path(resDir, "VlnPlot_nFeatureRNA_byClusters.png"), plot = vp, width = 10, height = 5)
+vp <- VlnPlot(seuratObjs.integrated, features = "nCount_RNA", group.by = cluster_name, pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
+ggsave(file.path(resDir, "VlnPlot_nCountRNA_byClusters.png"), plot = vp, width = 10, height = 5)
+# vp <- VlnPlot(seuratObjs.integrated, features = "pct.mt", group.by = cluster_name, pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
+# ggsave(file.path(resDir, "VlnPlot_percentMT_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
+# vp <- VlnPlot(seuratObjs.integrated, features = "pct.cp", group.by = cluster_name, pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
+# ggsave(file.path(resDir, "VlnPlot_percentCP_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
+# vp <- VlnPlot(seuratObjs.integrated, features = "pct.rb", group.by = cluster_name, pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
+# ggsave(file.path(resDir, "VlnPlot_percentRP_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
+# vp <- VlnPlot(seuratObjs.integrated, features = "score.debris", group.by = cluster_name, pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
+# ggsave(file.path(resDir, "VlnPlot_debris_score_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
+# vp <- VlnPlot(seuratObjs.integrated, features = "score.doublet", group.by = cluster_name, pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
+# ggsave(file.path(resDir, "VlnPlot_doublet_score_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
 
 source(Sys.which("annotation.R"))
 
@@ -152,16 +170,24 @@ if (!is.null(opt$seurat_reference) && file.exists(opt$seurat_reference)) {
   if (exists("anchor_transfer_anno")) {
     cat("###CheckPoint### Running anchor-transfer annotation with:", opt$seurat_reference, "\n")
     seur_ref <- readRDS(opt$seurat_reference)
-    seuratObjs.integrated <- UpdateSeuratObject(seuratObjs.integrated)
-    rownames(seuratObjs.integrated) <- gsub("\\.Araport.*$", "", rownames(seuratObjs.integrated))
-    rownames(seuratObjs.integrated) <- gsub("\\.v.*$", "", rownames(seuratObjs.integrated))
+    seuratObjs.integrated <- JoinLayers(seuratObjs.integrated, assay = "RNA")
     seuratObjs.integrated <- anchor_transfer_anno(seuratObjs.integrated, seur_ref)
-    dp <- DimPlot(seuratObjs.integrated, group.by = "predicted.id", label = T, label.size = 3)
-    ggsave(file.path(resDir, "UMAP_integration_predicted_id.png"), plot = dp, width = 8, height = 6)
-    dp <- DimPlot(seuratObjs.integrated, group.by = "predicted.id", split.by = "orig.ident", label = T, ncol = 2, label.size = 2)
-    ggsave(file.path(resDir, "UMAP_integration_predicted_id_by_sample.png"), plot = dp, width = 14, height = 6)
-    dp <- DimPlot(seuratObjs.integrated, split.by = "predicted.id", group.by = "predicted.id", label = F, label.size = 3, ncol = 6)
-    ggsave(file.path(resDir, "UMAP_integration_predicted_id_split.png"), plot = dp, width = 20, height = 10)
+    
+    dp <- DimPlot(seuratObjs.integrated, group.by = "predicted.id", label = T, label.size = 3) + theme(legend.position = "right")
+    ggsave(file.path(resDir, "UMAP_byCelltype.png"), plot = dp, width = 12, height = 6)
+    
+    dp <- DimPlot(seuratObjs.integrated, group.by = "predicted.id", split.by = "orig.ident", label = T, label.size = 2, ncol = 3) + theme(legend.position = "bottom")
+    h <- 8+3*length(unique(seuratObjs.integrated$orig.ident))/3
+    ggsave(file.path(resDir, "UMAP_byCelltype_perSample.png"), plot = dp, width = 14, height = h)
+    
+    dp <- DimPlot(seuratObjs.integrated, split.by = "predicted.id", group.by = "predicted.id", label = F, label.size = 3, ncol = 5) + theme(legend.position = "none")
+    h <- 3+3*length(unique(seuratObjs.integrated$predicted.id))/6
+    ggsave(file.path(resDir, "UMAP_perCelltype.png"), plot = dp, width = 20, height = h)
+    
+    dp <- DimPlot(seuratObjs.integrated, split.by = "predicted.id", group.by = "orig.ident", label = F, label.size = 3, ncol = 5) + theme(legend.position = "none")
+    h <- 3+3*length(unique(seuratObjs.integrated$predicted.id))/6
+    ggsave(file.path(resDir, "UMAP_bySample_perCelltype.png"), plot = dp, width = 20, height = h)
+    
   } else {
     cat("###WARNING### anchor_transfer_anno function not found. Skipping anchor-transfer annotation.\n")
   }
@@ -169,50 +195,7 @@ if (!is.null(opt$seurat_reference) && file.exists(opt$seurat_reference)) {
   cat("###CheckPoint### No Seurat reference provided or file not found. Skipping anchor-transfer annotation.\n")
 }
 
-saveRDS(seuratObjs.integrated, file.path(resDir, "seuratObjs_integrated.rds"))
-
-# seuratObjs_merged <- merge(x = seuratObjs[[1]], y = c(seuratObjs[[2]], seuratObjs[[3]]))
-
-# options(future.globals.maxSize = 3e+10)
-# seuratObjs_merged <- IntegrateLayers(object = seuratObjs_merged, method = CCAIntegration, new.reduction = "integrated.cca", normalization.method = "SCT", verbose = F)
-# seuratObjs_merged <- IntegrateLayers(object = seuratObjs_merged, method = RPCAIntegration, new.reduction = "integrated.rpca", normalization.method = "SCT", verbose = F)
-# seuratObjs_merged <- IntegrateLayers(object = seuratObjs_merged, method = HarmonyIntegration, new.reduction = "harmony", normalization.method = "SCT", verbose = F)
-# 
-# seuratObjs_merged <- FindNeighbors(seuratObjs_merged, dims = 1:30, reduction = "integrated.cca")
-# seuratObjs_merged <- FindClusters(seuratObjs_merged, resolution = 0.8, cluster.name = "cca_clusters")
-# seuratObjs_merged <- RunUMAP(seuratObjs_merged, dims = 1:30, reduction = "integrated.cca", reduction.name = "umap.cca")
-# 
-# seuratObjs_merged <- FindNeighbors(seuratObjs_merged, dims = 1:30, reduction = "integrated.rpca")
-# seuratObjs_merged <- FindClusters(seuratObjs_merged, resolution = 0.8, cluster.name = "rpca_clusters")
-# seuratObjs_merged <- RunUMAP(seuratObjs_merged, dims = 1:30, reduction = "integrated.rpca", reduction.name = "umap.rpca")
-# 
-# seuratObjs_merged <- FindNeighbors(seuratObjs_merged, dims = 1:30, reduction = "harmony")
-# seuratObjs_merged <- FindClusters(seuratObjs_merged, resolution = 0.8, cluster.name = "harmony_clusters") # latest clustering results will be stored in object metadata under 'seurat_clusters'. Idents will be updated, too. Note that 'seurat_clusters' will be overwritten everytime FindClusters is run
-# seuratObjs_merged <- RunUMAP(seuratObjs_merged, dims = 1:30, reduction = "harmony", reduction.name = "umap.harmony")
-# 
-# dp <- DimPlot(seuratObjs_merged, reduction = "umap.cca", group.by = c("orig.ident"))
-# ggsave(file.path(resDir, "UMAP_after_integration_all_CCA.png"), plot = dp, width = 6, height = 5)
-# dp <- DimPlot(seuratObjs_merged, reduction = "umap.cca", group.by = c("cca_clusters"))
-# ggsave(file.path(resDir, "UMAP_after_integration_all_CCA_clusters.png"), plot = dp, width = 6, height = 5)
-# 
-# dp <- DimPlot(seuratObjs_merged, reduction = "umap.rpca", group.by = c("orig.ident"))
-# ggsave(file.path(resDir, "UMAP_after_integration_all_RPCA.png"), plot = dp, width = 6, height = 5)
-# dp <- DimPlot(seuratObjs_merged, reduction = "umap.rpca", group.by = c("rpca_clusters"))
-# ggsave(file.path(resDir, "UMAP_after_integration_all_RPCA_clusters.png"), plot = dp, width = 6, height = 5)
-# 
-# dp <- DimPlot(seuratObjs_merged, reduction = "umap.harmony", group.by = c("orig.ident"))
-# ggsave(file.path(resDir, "UMAP_after_integration_all_Harmony.png"), plot = dp, width = 6, height = 5)
-# dp <- DimPlot(seuratObjs_merged, reduction = "umap.harmony", group.by = c("harmony_clusters"))
-# ggsave(file.path(resDir, "UMAP_after_integration_all_Harmony_clusters.png"), plot = dp, width = 6, height = 5)
-# 
-# vp <- VlnPlot(seuratObjs_merged, features = "nFeature_RNA", group.by = "cca_clusters", pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
-# ggsave(file.path(resDir, "VlnPlot_nFeature_RNA_after_integration_all_CCA_clusters.png"), plot = vp, width = 10, height = 5)
-# vp <- VlnPlot(seuratObjs_merged, features = "nFeature_RNA", group.by = "rpca_clusters", pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
-# ggsave(file.path(resDir, "VlnPlot_nFeature_RNA_after_integration_all_RPCA_clusters.png"), plot = vp, width = 10, height = 5)
-# vp <- VlnPlot(seuratObjs_merged, features = "nFeature_RNA", group.by = "harmony_clusters", pt.size = 0.1) + NoLegend() + theme(legend.position = "none")
-# ggsave(file.path(resDir, "VlnPlot_nFeature_RNA_after_integration_all_Harmony_clusters.png"), plot = vp, width = 10, height = 5)
-
-
+saveRDS(seuratObjs.integrated, paste0(resDir, "/seuratObjs_", integration_method, "_integrated.rds"))
 
 # percentage bar plots of samples in each cluster --------------------------------
 
@@ -257,8 +240,8 @@ if ("predicted.id" %in% colnames(seuratObjs.integrated@meta.data)) {
   long_df <- long_df %>% group_by(sample) %>% mutate(Percentage = (Count / sum(Count)) * 100)
   wide_df <- long_df %>% select(-Count) %>% pivot_wider(names_from = cluster, values_from = Percentage)
 
-  write.csv(trans_df, file = paste0(resDir, "/cell_counts_harmony_clusters_per_sample.csv"))
-  write.csv(wide_df, file = paste0(resDir, "/cell_percentage_harmony_clusters_per_sample.csv"))
+  write.csv(trans_df, file = paste0(resDir, "/cell_counts_", integration_method, "_clusters_per_sample.csv"))
+  write.csv(wide_df, file = paste0(resDir, "/cell_percentage_", integration_method, "_clusters_per_sample.csv"))
 
   long_df$sample <- factor(long_df$sample, levels = rev(unique(long_df$sample)))
   long_df$cluster <- factor(long_df$cluster, levels = unique(long_df$cluster))
@@ -273,9 +256,9 @@ if ("predicted.id" %in% colnames(seuratObjs.integrated@meta.data)) {
     theme(axis.text = element_text(colour = "black")) +
     coord_flip()
   ggsave(
-    file.path(resDir, "percentage_barplot_harmony_clusters_per_sample.png"),
+    paste0(resDir, "percentage_barplot_", integration_method, "_clusters_per_sample.png"),
     p,
-    width = 10,
+    width = 15,
     height = 6,
     units = "in"
   )
