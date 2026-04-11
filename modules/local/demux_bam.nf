@@ -25,8 +25,15 @@ samtools view -h -@ ${task.cpus} "\${INPUT_BAM}" | \\
 awk -v re="(${sp_dir})_+" '
     BEGIN { OFS="\\t" }
     /^@/ {
-        gsub(re, "", \$0)
-        print
+        if (/^@SQ/) {
+            if (\$0 ~ re) {
+                gsub(re, "", \$0)
+                print
+            }
+        } else {
+            gsub(re, "", \$0)
+            print
+        }
         next
     }
     {
