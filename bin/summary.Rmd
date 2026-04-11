@@ -92,7 +92,8 @@ DT::datatable(metrics_summary_tbs_mrg[,sequencing_cols], rownames = T, options =
 ### Mapping Metrics
 
 ```{r Step 2.2 - Cellranger Mapping Metrics, echo=FALSE }
-mapping_cols <- colnames(metrics_summary_tbs_mrg)[grep("Reads.Mapped.", colnames(metrics_summary_tbs_mrg))]
+# mapping_cols <- colnames(metrics_summary_tbs_mrg)[grep("Reads.Mapped.", colnames(metrics_summary_tbs_mrg))]
+mapping_cols <- c("Reads.Mapped.to.Genome", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.to.Genome"), "Reads.Mapped.Confidently.to.Genome", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Genome"), "Reads.Mapped.Confidently.to.Intergenic.Regions", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Intergenic.Regions"), "Reads.Mapped.Confidently.to.Intronic.Regions", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Intronic.Regions"), "Reads.Mapped.Confidently.to.Exonic.Regions", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Exonic.Regions"), "Reads.Mapped.Confidently.to.Transcriptome", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Transcriptome"), "Reads.Mapped.Antisense.to.Gene")
 DT::datatable(metrics_summary_tbs_mrg[,mapping_cols], rownames = T, options = list(pageLength = 100, dom = 'tip'))
 ```
 
