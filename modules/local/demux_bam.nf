@@ -2,7 +2,12 @@ process DEMUX_BAM {
     tag "${sample_id}"
     label 'process_medium'
     label 'samtools'
-    publishDir "${params.out}/demultiplex", mode: 'copy'
+    // Publish only BAM + index. Do not publish the whole cellranger/<sample>/ tree:
+    // DEMULTIPLEX already publishes outs/raw_feature_bc_matrix into the same path;
+    // copying the entire directory here would replace outs/ and drop the matrices.
+    publishDir "${params.out}/demultiplex", mode: 'copy', saveAs: { fn ->
+        (fn.endsWith('.bam') || fn.endsWith('.bai')) ? fn : null
+    }
 
     input:
     tuple val(sample_id), val(cellranger_outs_path)
