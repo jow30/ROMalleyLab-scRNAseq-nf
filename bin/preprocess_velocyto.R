@@ -167,13 +167,14 @@ saveRDS(opt, paste0("summary_opts_", opt$sample, ".rds"))
 
 set.seed(123)
 
-# Exit gracefully when too few cells remain; Nextflow treats exit 0 as success
-# so the process produces no outputs and downstream channels drop this sample.
-check_cells <- function(obj, step, min_cells = 500) {
+# Exit gracefully when too few cells remain; Nextflow treats exit 0 as success.
+# Emit seur_diem_<sample>.rds (object at this checkpoint) but not seur_clean_<sample>.rds.
+check_cells <- function(obj, step, min_cells = 400) {
   n <- ncol(obj)
   if (n < min_cells) {
     cat("###CheckPoint### ERROR: Only", n, "cells remaining after", step,
-        "(minimum required:", min_cells, "). Skipping this sample.\n")
+        "(minimum required:", min_cells, "). Saving seur_diem only; seur_clean omitted.\n")
+    saveRDS(obj, paste0("seur_diem_", opt$sample, ".rds"))
     quit(save = "no", status = 0)
   }
 }
