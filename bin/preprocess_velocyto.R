@@ -174,7 +174,14 @@ check_cells <- function(obj, step, min_cells = 400) {
   if (n < min_cells) {
     cat("###CheckPoint### ERROR: Only", n, "cells remaining after", step,
         "(minimum required:", min_cells, "). Saving seur_diem only; seur_clean omitted.\n")
+    obj <- UpdateSeuratObject(obj)
+    rownames(obj) <- gsub("\\.Araport.*$", "", rownames(obj))
+    rownames(obj) <- gsub("\\.v.*$", "", rownames(obj))
     saveRDS(obj, paste0("seur_diem_", opt$sample, ".rds"))
+    saveRDS(summary_dims, paste0("summary_dims_", opt$sample, ".rds"))
+    saveRDS(summary_tbs, paste0("summary_tbs_", opt$sample, ".rds"))
+    saveRDS(summary_plts, paste0("summary_plts_", opt$sample, ".rds"))
+
     quit(save = "no", status = 0)
   }
 }
@@ -185,6 +192,12 @@ summary_tbs  <- readRDS(paste0("summary_tbs_",  opt$sample, ".rds"))
 summary_plts <- readRDS(paste0("summary_plts_", opt$sample, ".rds"))
 seur_objs    <- readRDS(paste0("seur_objs_",    opt$sample, ".rds"))
 seur_diem    <- seur_objs[["After DIEM Debris Removal"]]
+
+for (step in c("After Unspliced Ratio Filtering", "After UMI/CP/MT/Gene Filtering", "After Doublet Removal", "After Min Cluster Marker Filtering", "After low-median-UMI/nGene Cluster Filtering")) {
+  summary_dims[[step]] <- c("nCell"=NA, "nGene"=NA, "nUMI"=NA)
+  summary_tbs[[step]] <- NULL
+  summary_plts[[step]] <- NULL
+}
 
 # Un-spliced ratio filtering -----------------------------------------------
 

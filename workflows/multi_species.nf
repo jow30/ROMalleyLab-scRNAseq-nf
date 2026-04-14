@@ -61,15 +61,16 @@ workflow MULTI_SPECIES_WF {
     // ── Demultiplex subworkflow (DEMULTIPLEX_PROCESS + DEMUX_BAM) ─────────────
     DEMULTIPLEX(cr_outs_ch, species_csv, species_list)
 
-    // Flatten DEMUX_BAM output: one [key, demux_sample_dir] per (species, sample).
-    // key = "${sp_dir}:::${sample_id}" — unique across all species/sample combos.
+    // Flatten DEMUX_BAM output: one [key, cellranger_sample_dir] per (species, sample).
+    // BAM paths are bam.parent.parent; key = "${sp_dir}:::${sample_id}".
     // Note: flatMap is done here (not in the subworkflow emit block) because
     // Nextflow requires emit: entries to reference process outputs directly.
     def demux_dirs_flat = DEMULTIPLEX.out.demux_sample_dirs
-        .flatMap { sid, dirs ->
-            (dirs instanceof List ? dirs : [dirs]).collect { d ->
-                // d = <sp_dir>/cellranger/<sample_id>  →  d.parent.parent.name = sp_dir
-                ["${d.parent.parent.name}:::${sid}", d]
+        .flatMap { sid, bams ->
+            (bams instanceof List ? bams : [bams]).collect { bam ->
+                // bam = <sp_dir>/cellranger/<sample_id>/outs/possorted_genome_bam.bam
+                def cr_dir = bam.parent.parent
+                ["${cr_dir.parent.parent.name}:::${sid}", cr_dir]
             }
         }
 
@@ -192,9 +193,21 @@ workflow MULTI_SPECIES_WF {
             [sp_dir, sid, rds]
         }
 
+    // seur_diem is emitted when min_cells fails (no seur_clean); same work dir must feed summary
+    def seur_diem_tagged = PREPROCESS.out.seur_diem
+        .map { key, rds ->
+            def sp_dir = key.tokenize(':::').first()
+            def sid    = key.tokenize(':::').last()
+            [sp_dir, sid, rds]
+        }
+
     // Per-species staged dirs for summary.Rmd to scan (CELL_FILTERING + COUNT_READS work dirs)
     def sp_seur_dirs_ch = seur_clean_tagged
         .map { sp_dir, sid, rds -> [sp_dir, rds.toAbsolutePath().parent.toString()] }
+        .mix(
+            seur_diem_tagged
+                .map { sp_dir, _sid, rds -> [sp_dir, rds.toAbsolutePath().parent.toString()] }
+        )
         .mix(
             PREPROCESS.out.count_tables
                 .map { key, type, tsv ->

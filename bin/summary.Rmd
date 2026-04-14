@@ -92,8 +92,11 @@ DT::datatable(metrics_summary_tbs_mrg[,sequencing_cols], rownames = T, options =
 ### Mapping Metrics
 
 ```{r Step 2.2 - Cellranger Mapping Metrics, echo=FALSE }
-# mapping_cols <- colnames(metrics_summary_tbs_mrg)[grep("Reads.Mapped.", colnames(metrics_summary_tbs_mrg))]
-mapping_cols <- c("Reads.Mapped.to.Genome", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.to.Genome"), "Reads.Mapped.Confidently.to.Genome", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Genome"), "Reads.Mapped.Confidently.to.Intergenic.Regions", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Intergenic.Regions"), "Reads.Mapped.Confidently.to.Intronic.Regions", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Intronic.Regions"), "Reads.Mapped.Confidently.to.Exonic.Regions", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Exonic.Regions"), "Reads.Mapped.Confidently.to.Transcriptome", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Transcriptome"), "Reads.Mapped.Antisense.to.Gene")
+if (any(grepl(params$species, colnames(metrics_summary_tbs_mrg)))) {
+  mapping_cols <- c("Reads.Mapped.to.Genome", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.to.Genome"), "Reads.Mapped.Confidently.to.Genome", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Genome"), "Reads.Mapped.Confidently.to.Intergenic.Regions", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Intergenic.Regions"), "Reads.Mapped.Confidently.to.Intronic.Regions", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Intronic.Regions"), "Reads.Mapped.Confidently.to.Exonic.Regions", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Exonic.Regions"), "Reads.Mapped.Confidently.to.Transcriptome", paste0(gsub(" ", ".", params$species), ".Reads.Mapped.Confidently.to.Transcriptome"), "Reads.Mapped.Antisense.to.Gene")
+} else {
+  mapping_cols <- colnames(metrics_summary_tbs_mrg)[grep("Reads.Mapped.", colnames(metrics_summary_tbs_mrg))]
+}
 DT::datatable(metrics_summary_tbs_mrg[,mapping_cols], rownames = T, options = list(pageLength = 100, dom = 'tip'))
 ```
 
@@ -224,18 +227,21 @@ for (sample in params$seur_sel) {
 ```{r Step 3 - Seurat Samples, echo=FALSE, results='asis' }
 
 seur_objs <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "seur_clean_.*.rds$", recurse = TRUE)) %>% unlist(use.names = F)
+seur_objs_diem <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "seur_diem_.*.rds$", recurse = TRUE)) %>% unlist(use.names = F)
 summary_dims <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "summary_dims_.*.rds$", recurse = TRUE)) %>% unlist(use.names = F)
 summary_tbs <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "summary_tbs_.*.rds$", recurse = TRUE)) %>% unlist(use.names = F)
 summary_plts <- lapply(params$seur_dir, function(x) dir_ls(x, regexp = "summary_plts_.*.rds$", recurse = TRUE)) %>% unlist(use.names = F)
 
 if (!is.null(params$seur_sel)) {
   seur_objs <- lapply(params$seur_sel, function(x) seur_objs[grep(paste0("seur_clean_", x, ".rds"), seur_objs)]) %>% unlist()
+  seur_objs_diem <- lapply(params$seur_sel, function(x) seur_objs_diem[grep(paste0("seur_diem_", x, ".rds"), seur_objs_diem)]) %>% unlist()
   summary_dims <- lapply(params$seur_sel, function(x) summary_dims[grep(paste0("summary_dims_", x, ".rds"), summary_dims)]) %>% unlist()
   summary_tbs <- lapply(params$seur_sel, function(x) summary_tbs[grep(paste0("summary_tbs_", x, ".rds"), summary_tbs)]) %>% unlist()
   summary_plts <- lapply(params$seur_sel, function(x) summary_plts[grep(paste0("summary_plts_", x, ".rds"), summary_plts)]) %>% unlist()
 }
 
 seur_basenames <- gsub("^seur_clean_(.*).rds","\\1", basename(seur_objs))
+seur_basenames_diem <- gsub("^seur_diem_(.*).rds","\\1", basename(seur_objs_diem))
 
 if (any(duplicated(seur_basenames))) {
   seur_basenames_uniq <- make.unique(seur_basenames)
@@ -244,12 +250,12 @@ if (any(duplicated(seur_basenames))) {
 }
 
 # Print sample names and full paths in a table
-DT::datatable(data.frame(Sample_ID = seur_basenames, Path = seur_objs), rownames = F, options = list(pageLength = 100, dom = 'tip'))
+DT::datatable(data.frame(Sample_ID = seur_basenames_diem, Path = seur_objs), rownames = F, options = list(pageLength = 100, dom = 'tip'))
 
 seur_objs <- lapply(seur_objs, readRDS) %>% setNames(seur_basenames)
-summary_dims <- lapply(summary_dims, readRDS) %>% setNames(seur_basenames)
-summary_tbs <- lapply(summary_tbs, readRDS) %>% setNames(seur_basenames)
-summary_plts <- lapply(summary_plts, readRDS) %>% setNames(seur_basenames)
+summary_dims <- lapply(summary_dims, readRDS) %>% setNames(seur_basenames_diem)
+summary_tbs <- lapply(summary_tbs, readRDS) %>% setNames(seur_basenames_diem)
+summary_plts <- lapply(summary_plts, readRDS) %>% setNames(seur_basenames_diem)
 
 ```
 
@@ -640,6 +646,84 @@ for (n in seq_along(seur_objs)) {
     print(dt_tag)
   }else{
     cat("No anchor-transfer-based annotation available.\n")
+  }
+}
+```
+
+# Cluster marker genes
+
+All positive markers passing the same thresholds as preprocessing (`logfc.threshold = log2(1.5)`, `min.pct = 0.1`); `SCT` assay if present, otherwise `RNA`.
+
+```{r Step 8 - Cluster marker genes, echo=FALSE, results='asis'}
+if (!exists("seur_objs") || length(seur_objs) == 0) {
+  cat("No `seur_clean` objects in scope; skipping cluster marker tables.\n")
+} else {
+  for (n in seq_along(seur_objs)) {
+    seur <- seur_objs[[n]]
+    cat(sprintf("## Sample: %s\n\n", names(seur_objs)[n]))
+
+    if (length(unique(Idents(seur))) < 2) {
+      cat("Fewer than 2 clusters; skipping `FindAllMarkers`.\n\n")
+      next
+    }
+
+    mk <- tryCatch(
+      {
+        if ("SCT" %in% Seurat::Assays(seur)) {
+          seur <- Seurat::PrepSCTFindMarkers(seur)
+          Seurat::FindAllMarkers(
+            seur,
+            only.pos = TRUE,
+            assay = "SCT",
+            logfc.threshold = log2(1.5),
+            min.pct = 0.1,
+            verbose = FALSE
+          )
+        } else {
+          Seurat::FindAllMarkers(
+            seur,
+            only.pos = TRUE,
+            assay = "RNA",
+            logfc.threshold = log2(1.5),
+            min.pct = 0.1,
+            verbose = FALSE
+          )
+        }
+      },
+      error = function(e) {
+        warning("FindAllMarkers failed for ", nm, ": ", conditionMessage(e))
+        NULL
+      }
+    )
+
+    if (is.null(mk) || nrow(mk) == 0) {
+      cat("No marker genes returned (or marker detection failed).\n\n")
+      next
+    }
+
+    mk_show <- mk %>%
+      dplyr::arrange(cluster, p_val_adj, dplyr::desc(abs(avg_log2FC))) %>%
+      dplyr::mutate(
+        p_val = signif(p_val, 5),
+        p_val_adj = signif(p_val_adj, 5),
+        avg_log2FC = signif(avg_log2FC, 4)
+      )
+
+    print(
+      DT::datatable(
+        mk_show,
+        rownames = FALSE,
+        caption = paste("Cluster markers:", names(seur_objs)[n]),
+        extensions = "Buttons",
+        options = list(
+          pageLength = 50,
+          scrollX = TRUE,
+          dom = "Bfrtip",
+          buttons = c("copy", "csv", "excel")
+        )
+      )
+    )
+    cat("\n\n")
   }
 }
 ```

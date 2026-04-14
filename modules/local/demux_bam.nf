@@ -2,22 +2,20 @@ process DEMUX_BAM {
     tag "${sample_id}"
     label 'process_medium'
     label 'samtools'
-    // Publish only BAM + index. Do not publish the whole cellranger/<sample>/ tree:
-    // DEMULTIPLEX already publishes outs/raw_feature_bc_matrix into the same path;
-    // copying the entire directory here would replace outs/ and drop the matrices.
-    publishDir "${params.out}/demultiplex", mode: 'copy', saveAs: { fn ->
-        (fn.endsWith('.bam') || fn.endsWith('.bai')) ? fn : null
-    }
+    // Publish BAM + BAI as explicit path outputs (not the whole <sp>/cellranger/<sample>/
+    // directory). Nextflow often does not apply publishDir `pattern` / `saveAs` to files
+    // nested inside a directory output, so those approaches published nothing. File outputs
+    // copy into demultiplex/ without replacing sibling outs/raw_feature_bc_matrix from DEMULTIPLEX.
+    publishDir "${params.out}/demultiplex", mode: 'copy'
 
     input:
     tuple val(sample_id), val(cellranger_outs_path)
     val species_list
 
     output:
-    // Per-species sample directory: <sp_dir>/cellranger/<sample_id>/
-    // Contains outs/possorted_genome_bam.bam — mirrors CellRanger layout so
-    // VELOCYTO_RUN can read ${cellranger_dir}/outs/possorted_genome_bam.bam
-    tuple val(sample_id), path("*/cellranger/${sample_id}"), emit: demux_sample_dirs
+    // One path per species; workflow derives <sp>/cellranger/<sample_id> as bam.parent.parent
+    tuple val(sample_id), path("*/cellranger/${sample_id}/outs/possorted_genome_bam.bam"), emit: demux_sample_dirs
+    path("*/cellranger/${sample_id}/outs/possorted_genome_bam.bam.bai"), emit: demux_bai
 
     script:
     def species_cmds = species_list.collect { sp ->

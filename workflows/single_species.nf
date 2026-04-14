@@ -78,8 +78,13 @@ workflow SINGLE_SPECIES_WF {
         .collect()
 
     // Staged output dirs from CELL_FILTERING + COUNT_READS — data dependency + seur_dirs.
+    // Include seur_diem when min_cells skips (no seur_clean) so summary still sees that work dir.
     def seur_dirs_ch = PREPROCESS.out.seur_clean
         .map { sid, rds -> rds.toAbsolutePath().parent.toString() }
+        .mix(
+            PREPROCESS.out.seur_diem
+                .map { sid, rds -> rds.toAbsolutePath().parent.toString() }
+        )
         .mix(
             PREPROCESS.out.count_tables
                 .map { key, type, tsv -> tsv.toAbsolutePath().parent.toString() }
