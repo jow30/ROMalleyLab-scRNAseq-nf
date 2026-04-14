@@ -143,10 +143,11 @@ These parameters only apply when running with multiple species (`--clean chi` is
 ```
 <out>/
 ├── cellranger/          # CellRanger count outputs per sample
-├── preprocess/          # Seurat objects, QC plots, and tables
-│   └── <species>/       # (multi-species only) per-species subdirectories
-└── summary/             # HTML summary report
+└── preprocess/          # Processed seurat objects, HTML summary report, and other results
 ```
+
+seur_diem_*.rds: Seurat object after DIEM filtering with full metadata (including debris score, unsplicing ratio, doublet score, etc.) -> good for exploring different filtering cutoffs
+seur_clean_*.rds: Seurat object after all filtering steps with full metadata -> good for downstream analysis like integration and differential analysis
 
 ---
 
@@ -229,3 +230,56 @@ If `cellranger` points to an existing directory it will be used directly; otherw
 ```bash
 nextflow run jow30/ROMalleyLab-scRNAseq-nf --help
 ```
+
+---
+
+## Q&A
+
+### What if I want to use different cutoff values for different samples?
+
+You can run each sample in a separate nextflow run with different cutoff values. Then you can generate the [combined summary report](./README.md#how-can-i-build-one-summary-report-across-samples-from-different-experiments) to compare the results across samples.
+
+
+### How can I build one summary report across samples from different experiments?
+
+Render `bin/summary.Rmd` manually and pass combined paths from multiple runs.
+
+Provide:
+- `cellranger_dir`: absolute paths to per-sample CellRanger output directories
+- `cellranger_sel`: sample IDs to include (must match names in those paths)
+- `seur_dir`: absolute paths to preprocess/CELL_FILTERING work directories containing `seur_clean_*.rds` or `seur_diem_*.rds`
+- `seur_sel`: sample IDs to include in Seurat/read-count sections
+- `species`: full species name used in this combined report
+
+Example:
+
+```bash
+cd /path/to/combined_summary_folder
+
+module load scrnaseq/1.0
+
+Rscript -e "rmarkdown::render(
+  input = 'bin/summary.Rmd',
+  params = list(
+    title = 'Combined scRNA-seq summary',
+    author = 'Qiaoshan Lin',
+    cellranger_dir = c(
+      '/absolute/path/to/exp1/cellranger/output/folder/sampleA',
+      '/absolute/path/to/exp1/cellranger/output/folder/sampleB',
+      '/absolute/path/to/exp2/cellranger/output/folder/sampleC',
+      '/absolute/path/to/exp2/cellranger/output/folder/sampleD'
+    ),
+    cellranger_sel = c('sampleA', 'sampleC'),
+    seur_dir = c(
+      '/absolute/path/to/exp1/preprocess/output/folder',
+      '/absolute/path/to/exp2/preprocess/output/folder'
+    ),
+    seur_sel = c('sampleA', 'sampleC'),
+    species = 'Arabidopsis thaliana'
+  ),
+  output_dir = getwd(),
+  output_file = 'summary_combined.html'
+)"
+```
+
+Tip: use `cellranger_sel` / `seur_sel` to include only selected samples without moving any files.
