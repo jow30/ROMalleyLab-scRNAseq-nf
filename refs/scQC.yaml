@@ -2,6 +2,7 @@ Arabidopsis thaliana:
     mitochondrial_pattern: "^ATMG"
     chloroplast_pattern: "^ATCG"
     ribosomal_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/ribosomal_genes/canonical_ribosomal_genes.Araport11.447.txt"
+    celltype_markers: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/markers/arabidopsis_thaliana.marker_fd.csv"
     annotation_ref_seurat_obj: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/GSE297576_seurat_object.thaliana_seedling_atlas.RDS"
 Arabidopsis lyrata:
     mitochondrial_genes: "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_lyrata/mitochondrial_genes.txt"

@@ -39,7 +39,7 @@ marker_enrich_anno <- function(seur, marker_file){
   ref_marker <- read.csv(marker_file)
   ref_marker <- ref_marker[ref_marker$p_val_adj < 0.01 & ref_marker$avg_log2FC > 1,c("gene", "name","p_val_adj","avg_log2FC","clusterName")]
   
-  ref_marker$gene <- gsub("$", ".Araport11.447", ref_marker$gene)
+  # ref_marker$gene <- gsub("$", ".Araport11.447", ref_marker$gene)
   
   ref_marker_top50 <- ref_marker %>%
     group_by(clusterName) %>%
@@ -104,7 +104,7 @@ marker_enrich_anno <- function(seur, marker_file){
   cell_modules <- module_lookup[as.character(Idents(seur))]
   names(cell_modules) <- colnames(seur)
   
-  seur$celltype <- cell_modules
+  seur$marker_anno <- cell_modules
   
   return(seur)
 }

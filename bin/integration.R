@@ -1,24 +1,18 @@
+#!/usr/bin/env Rscript
 rm(list = ls())
-
-library(dplyr)
-library(Seurat)
-library(glmGamPoi)
-library(patchwork)
-library(ggplot2)
-library(reshape2)
-library(tidyr)
-library(RColorBrewer)
 
 suppressWarnings(suppressPackageStartupMessages(library(optparse)))
 
 option_list <- list(
   make_option(c("-i", "--inputRds"),
               type = "character",
-              help = "Input RDS files containing Seurat objects (comma-separated) [REQUIRED]"),
+              default = NULL,
+              help = "Input RDS files containing Seurat objects (comma-separated). If omitted, all .rds/.RDS files in current directory are used [default = auto]"),
   
   make_option(c("-o", "--resDir"),
               type = "character",
-              help = "Output directory [REQUIRED]"),
+              default = ".",
+              help = "Output directory [default = %default]"),
               
   make_option(c("-n", "--nFeatures"),
               type = "integer",
@@ -28,18 +22,23 @@ option_list <- list(
   make_option(c("-m", "--integration_method"),
               type = "character",
               default = "RPCA",
-              help = "Integration method to apply [default = %default]",
+              help = "Integration method to apply (RPCA, CCA, or harmony) [default = %default]",
               ),
   
-  make_option(c("--markers"),
+  make_option(c("-s", "--species"),
               type = "character",
-              default = NULL,
-              help = "Path to marker CSV file for enrichment-based annotation [default = NULL]"),
+              default = "Arabidopsis thaliana",
+              help = "Species full name [default = %default]"),
   
-  make_option(c("--seurat_reference"),
+  make_option(c("--ref_yaml"),
               type = "character",
-              default = NULL,
-              help = "Path to Seurat reference RDS file for anchor-transfer annotation [default = NULL]")
+              default = "/project/gzy8899/qiaoshan/scRNAseq/nextflow/refs/scQC.yaml",
+              help = "The organelle gene lists and annotation references of all available species curated in yaml [default = %default]"),
+
+  make_option(c("--memory"),
+              type = "integer",
+              default = 16,
+              help = "Memory limit in GB [default = %default]")
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))
@@ -49,12 +48,22 @@ opt <- parse_args(OptionParser(option_list=option_list))
 #   resDir = ".",
 #   nFeatures = 3000,
 #   integration_method = "RPCA",
-#   markers = NULL,
-#   seurat_reference = "/project/gzy8899/qiaoshan/scRNAseq/references/Arabidopsis_thaliana/GSE297576_seurat_object.thaliana_seedling_atlas.RDS"
+#   species = "Arabidopsis thaliana",
+#   ref_yaml = "/project/gzy8899/qiaoshan/scRNAseq/nextflow/refs/scQC.yaml"
 # )
 # opt <- options()
 
-required_args <- c("inputRds", "resDir")
+suppressWarnings(suppressPackageStartupMessages(library(dplyr)))
+suppressWarnings(suppressPackageStartupMessages(library(Seurat)))
+suppressWarnings(suppressPackageStartupMessages(library(glmGamPoi)))
+suppressWarnings(suppressPackageStartupMessages(library(patchwork)))
+suppressWarnings(suppressPackageStartupMessages(library(ggplot2)))
+suppressWarnings(suppressPackageStartupMessages(library(reshape2)))
+suppressWarnings(suppressPackageStartupMessages(library(tidyr)))
+suppressWarnings(suppressPackageStartupMessages(library(RColorBrewer)))
+suppressWarnings(suppressPackageStartupMessages(library(yaml)))
+
+required_args <- c("resDir", "species", "ref_yaml")
 missing <- required_args[ sapply(required_args, function(x) is.null(opt[[x]])) ]
 
 if (length(missing) > 0) {
@@ -63,14 +72,40 @@ if (length(missing) > 0) {
   quit(status = 1)
 }
 
+qc_patterns <- read_yaml(opt$ref_yaml)
+if (opt$species %in% names(qc_patterns)) {
+  if(!is.null(qc_patterns[[opt$species]]$annotation_ref_seurat_obj)) {
+    seurat_reference = qc_patterns[[opt$species]]$annotation_ref_seurat_obj
+  }else{
+    seurat_reference = NULL
+  }
+  if(!is.null(qc_patterns[[opt$species]]$celltype_markers)) {
+    markers = qc_patterns[[opt$species]]$celltype_markers
+  }else{
+    markers = NULL
+  }
+} else {
+  stop("###ERROR### This species is absent from the reference yaml. Please add annotation references to ref.yaml\n")
+}
+
 resDir <- opt$resDir
 inputRds <- opt$inputRds
 nFeatures <- opt$nFeatures
 integration_method <- opt$integration_method
+mem <- opt$memory
 
 if (!dir.exists(resDir)) {dir.create(resDir, recursive = TRUE)}
 
-inputRds_files <- strsplit(inputRds, ",")[[1]]
+if (is.null(inputRds) || inputRds == "") {
+  inputRds_files <- list.files(resDir, pattern = "\\.[Rr][Dd][Ss]$", full.names = TRUE)
+} else {
+  inputRds_files <- strsplit(inputRds, ",")[[1]]
+}
+
+if (length(inputRds_files) == 0) {
+  stop("###ERROR### No .rds/.RDS files found in current directory '.', and --inputRds was not provided.")
+}
+
 seuratObjs <- lapply(inputRds_files, function(r) {
   if(!file.exists(r)) {
     stop(paste("Input file not found:", r))
@@ -81,7 +116,7 @@ seuratObjs <- lapply(inputRds_files, function(r) {
 names(seuratObjs) <- sapply(seuratObjs, function(x) unique(x$orig.ident)[1])
 
 seuratObjs.integrated <- merge(seuratObjs[[1]], y = seuratObjs[-1])
-options(future.globals.maxSize = 8000 * 1024^2) # set memory limit to 8G
+options(future.globals.maxSize = mem * 1024^3) # set memory limit to 8G
 
 if(integration_method == "RPCA") {
   seuratObjs.integrated <- NormalizeData(seuratObjs.integrated)
@@ -148,16 +183,17 @@ ggsave(file.path(resDir, "VlnPlot_nCountRNA_byClusters.png"), plot = vp, width =
 # ggsave(file.path(resDir, "VlnPlot_doublet_score_RNA_integration_seurat_clusters.png"), plot = vp, width = 10, height = 5)
 
 source(Sys.which("annotation.R"))
+# source("/project/gzy8899/qiaoshan/scRNAseq/nextflow/bin/annotation.R")
 
 # Marker-enrichment annotation
-if (!is.null(opt$markers) && file.exists(opt$markers)) {
+if (!is.null(markers) && file.exists(markers)) {
   if (exists("marker_enrich_anno")) {
-    cat("###CheckPoint### Running marker-enrichment annotation with:", opt$markers, "\n")
-    seuratObjs.integrated <- marker_enrich_anno(seuratObjs.integrated, opt$markers)
-    dp <- DimPlot(seuratObjs.integrated, group.by = "celltype", label = T)
-    ggsave(file.path(resDir, "UMAP_integration_celltype.png"), plot = dp, width = 8, height = 6)
-    dp <- DimPlot(seuratObjs.integrated, group.by = "celltype", label = T, split.by = "orig.ident", ncol = 2)
-    ggsave(file.path(resDir, "UMAP_integration_celltype_by_sample.png"), plot = dp, width = 14, height = 6)
+    cat("###CheckPoint### Running marker-enrichment annotation with:", markers, "\n")
+    seuratObjs.integrated <- marker_enrich_anno(seuratObjs.integrated, markers)
+    dp <- DimPlot(seuratObjs.integrated, group.by = "marker_anno", label = T)
+    ggsave(file.path(resDir, "UMAP_byMarkerBasedCelltype.png"), plot = dp, width = 8, height = 6)
+    dp <- DimPlot(seuratObjs.integrated, group.by = "marker_anno", label = T, split.by = "orig.ident", ncol = 2)
+    ggsave(file.path(resDir, "UMAP_byMarkerBasedCelltype_perSample.png"), plot = dp, width = 14, height = 6)
   } else {
     cat("###WARNING### marker_enrich_anno function not found. Skipping marker annotation.\n")
   }
@@ -166,26 +202,30 @@ if (!is.null(opt$markers) && file.exists(opt$markers)) {
 }
 
 # Anchor-transfer annotation
-if (!is.null(opt$seurat_reference) && file.exists(opt$seurat_reference)) {
+if (!is.null(seurat_reference) && file.exists(seurat_reference)) {
   if (exists("anchor_transfer_anno")) {
-    cat("###CheckPoint### Running anchor-transfer annotation with:", opt$seurat_reference, "\n")
-    seur_ref <- readRDS(opt$seurat_reference)
+    cat("###CheckPoint### Running anchor-transfer annotation with:", seurat_reference, "\n")
+    seur_ref <- readRDS(seurat_reference)
     seuratObjs.integrated <- JoinLayers(seuratObjs.integrated, assay = "RNA")
+    if (!("anchor_anno" %in% colnames(seuratObjs.integrated@meta.data))) {
+      seuratObjs.integrated$anchor_anno <- seuratObjs.integrated$predicted.id
+    }
+    seuratObjs.integrated$anchor_anno_solo <- seuratObjs.integrated$anchor_anno
     seuratObjs.integrated <- anchor_transfer_anno(seuratObjs.integrated, seur_ref)
     
-    dp <- DimPlot(seuratObjs.integrated, group.by = "predicted.id", label = T, label.size = 3) + theme(legend.position = "right")
+    dp <- DimPlot(seuratObjs.integrated, group.by = "anchor_anno", label = T, label.size = 3) + theme(legend.position = "right")
     ggsave(file.path(resDir, "UMAP_byCelltype.png"), plot = dp, width = 12, height = 6)
     
-    dp <- DimPlot(seuratObjs.integrated, group.by = "predicted.id", split.by = "orig.ident", label = T, label.size = 2, ncol = 3) + theme(legend.position = "bottom")
+    dp <- DimPlot(seuratObjs.integrated, group.by = "anchor_anno", split.by = "orig.ident", label = T, label.size = 2, ncol = 3) + theme(legend.position = "bottom")
     h <- 8+3*length(unique(seuratObjs.integrated$orig.ident))/3
     ggsave(file.path(resDir, "UMAP_byCelltype_perSample.png"), plot = dp, width = 14, height = h)
     
-    dp <- DimPlot(seuratObjs.integrated, split.by = "predicted.id", group.by = "predicted.id", label = F, label.size = 3, ncol = 5) + theme(legend.position = "none")
-    h <- 3+3*length(unique(seuratObjs.integrated$predicted.id))/6
+    dp <- DimPlot(seuratObjs.integrated, split.by = "anchor_anno", group.by = "anchor_anno", label = F, label.size = 3, ncol = 5) + theme(legend.position = "none")
+    h <- 3+3*length(unique(seuratObjs.integrated$anchor_anno))/6
     ggsave(file.path(resDir, "UMAP_perCelltype.png"), plot = dp, width = 20, height = h)
     
-    dp <- DimPlot(seuratObjs.integrated, split.by = "predicted.id", group.by = "orig.ident", label = F, label.size = 3, ncol = 5) + theme(legend.position = "none")
-    h <- 3+3*length(unique(seuratObjs.integrated$predicted.id))/6
+    dp <- DimPlot(seuratObjs.integrated, split.by = "anchor_anno", group.by = "orig.ident", label = F, label.size = 3, ncol = 5) + theme(legend.position = "none")
+    h <- 3+3*length(unique(seuratObjs.integrated$anchor_anno))/6
     ggsave(file.path(resDir, "UMAP_bySample_perCelltype.png"), plot = dp, width = 20, height = h)
     
   } else {
@@ -199,18 +239,18 @@ saveRDS(seuratObjs.integrated, paste0(resDir, "/seuratObjs_", integration_method
 
 # percentage bar plots of samples in each cluster --------------------------------
 
-if ("celltype" %in% colnames(seuratObjs.integrated@meta.data)) {
-  init_df <- data.frame(cluster = seuratObjs.integrated$celltype, sample = seuratObjs.integrated$orig.ident)
+if ("anchor_anno" %in% colnames(seuratObjs.integrated@meta.data)) {
+  init_df <- data.frame(cluster = seuratObjs.integrated$anchor_anno, sample = seuratObjs.integrated$orig.ident)
   trans_df <- dcast(init_df, cluster ~ sample, fun.aggregate = length)
   long_df <- pivot_longer(trans_df, cols = -cluster, names_to = "sample", values_to = "Count")
   long_df <- long_df %>% group_by(cluster) %>% mutate(Percentage = (Count / sum(Count)) * 100)
   wide_df <- long_df %>% select(-Count) %>% pivot_wider(names_from = sample, values_from = Percentage)
 
-  write.csv(trans_df, file = paste0(resDir, "/cell_counts_samples_per_harmony_cluster.csv"))
-  write.csv(wide_df, file = paste0(resDir, "/cell_percentage_samples_per_harmony_cluster.csv"))
+  write.csv(trans_df, file = paste0(resDir, "/cell_counts_", integration_method, "_samples_perCelltype.csv"))
+  write.csv(wide_df, file = paste0(resDir, "/cell_percentage_", integration_method, "_samples_perCelltype.csv"))
 
   long_df$sample <- factor(long_df$sample, levels = unique(long_df$sample))
-  sample_color <- brewer.pal(n = 7, name = 'Set2')
+  sample_color <- c(brewer.pal(n = 8, name = 'Set2'), brewer.pal(n = 9, name = 'Set1'), brewer.pal(n = 12, name = 'Set3'), brewer.pal(n = 12, name = 'Paired'))[1:length(levels(long_df$sample))]
   names(sample_color) <- levels(long_df$sample)
 
   p <- ggplot(long_df, aes(x = cluster, y = Percentage, fill = sample)) +
@@ -221,31 +261,31 @@ if ("celltype" %in% colnames(seuratObjs.integrated@meta.data)) {
     theme(axis.text = element_text(colour = "black")) +
     coord_flip()
   ggsave(
-    file.path(resDir, "percentage_barplot_samples_per_harmony_cluster.png"),
+    paste0(resDir, "/percentage_barplot_", integration_method, "_samples_perCelltype.png"),
     p,
     width = 8,
     height = 8,
     units = "in"
   )
 } else {
-  cat("###CheckPoint### 'celltype' column not found. Skipping celltype barplot.\n")
+  cat("###CheckPoint### 'anchor_anno' column not found. Skipping celltype barplot.\n")
 }
 
 # percentage bar plots of clusters for each sample --------------------------------
 
-if ("predicted.id" %in% colnames(seuratObjs.integrated@meta.data)) {
-  init_df <- data.frame(cluster = seuratObjs.integrated$predicted.id, sample = seuratObjs.integrated$orig.ident)
+if ("anchor_anno" %in% colnames(seuratObjs.integrated@meta.data)) {
+  init_df <- data.frame(cluster = seuratObjs.integrated$anchor_anno, sample = seuratObjs.integrated$orig.ident)
   trans_df <- dcast(init_df, sample ~ cluster, fun.aggregate = length)
   long_df <- pivot_longer(trans_df, cols = -sample, names_to = "cluster", values_to = "Count")
   long_df <- long_df %>% group_by(sample) %>% mutate(Percentage = (Count / sum(Count)) * 100)
   wide_df <- long_df %>% select(-Count) %>% pivot_wider(names_from = cluster, values_from = Percentage)
 
-  write.csv(trans_df, file = paste0(resDir, "/cell_counts_", integration_method, "_clusters_per_sample.csv"))
-  write.csv(wide_df, file = paste0(resDir, "/cell_percentage_", integration_method, "_clusters_per_sample.csv"))
+  write.csv(trans_df, file = paste0(resDir, "/cell_counts_", integration_method, "_celltype_perSample.csv"))
+  write.csv(wide_df, file = paste0(resDir, "/cell_percentage_", integration_method, "_celltype_perSample.csv"))
 
   long_df$sample <- factor(long_df$sample, levels = rev(unique(long_df$sample)))
   long_df$cluster <- factor(long_df$cluster, levels = unique(long_df$cluster))
-  cluster_color <- c(brewer.pal(n = 13, name = 'Set2'), brewer.pal(n = 13, name = 'Set1'), brewer.pal(n = 13, name = 'Set3'), brewer.pal(n = 13, name = 'Paired'))[1:length(levels(long_df$cluster))]
+  cluster_color <- c(brewer.pal(n = 8, name = 'Set2'), brewer.pal(n = 9, name = 'Set1'), brewer.pal(n = 12, name = 'Set3'), brewer.pal(n = 12, name = 'Paired'))[1:length(levels(long_df$cluster))]
   names(cluster_color) <- levels(long_df$cluster)
 
   p <- ggplot(long_df, aes(x = sample, y = Percentage, fill = cluster)) +
@@ -256,14 +296,14 @@ if ("predicted.id" %in% colnames(seuratObjs.integrated@meta.data)) {
     theme(axis.text = element_text(colour = "black")) +
     coord_flip()
   ggsave(
-    paste0(resDir, "percentage_barplot_", integration_method, "_clusters_per_sample.png"),
+    paste0(resDir, "/percentage_barplot_", integration_method, "_celltype_per_sample.png"),
     p,
-    width = 15,
+    width = 20,
     height = 6,
     units = "in"
   )
 } else {
-  cat("###CheckPoint### 'predicted.id' column not found. Skipping predicted.id barplot.\n")
+  cat("###CheckPoint### 'anchor_anno' column not found. Skipping anchor_anno barplot.\n")
 }
 
 

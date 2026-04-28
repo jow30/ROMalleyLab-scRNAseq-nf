@@ -12,6 +12,32 @@ A Nextflow pipeline for processing single-nucleus RNA sequencing data from plant
 
 ---
 
+## Bash Environment Preset
+
+Use the following command to add the module environment to your `.bashrc` file:
+
+```bash
+echo "module use /project/gzy8899/modules" >> ~/.bashrc
+```
+
+Then source the `.bashrc` file:
+
+```bash
+source ~/.bashrc
+```
+
+Check if the module environment is added:
+
+```bash
+module avail
+```
+
+If you see the `/project/gzy8899/modules` listed, the module environment is added successfully.
+
+*This setup is needed to be done only once.*
+
+---
+
 ## Quick Start
 
 ```bash
@@ -40,6 +66,14 @@ nextflow run jow30/ROMalleyLab-scRNAseq-nf --input samplesheet.csv --out exp1-nf
 
 ---
 
+Print help message:
+
+```bash
+nextflow run jow30/ROMalleyLab-scRNAseq-nf --help
+```
+
+---
+
 ## Samplesheet Format
 
 Provide a CSV with the following columns:
@@ -63,15 +97,49 @@ FASTQ filenames should follow standard Illumina naming: `*_S*_L*_R*_*.fastq.gz`.
 
 ---
 
-## Species
+## Configuring `scQC.yaml`
 
-The following species have pre-configured references (genome, GTF, CellRanger index, Seurat reference atlas):
+The file `refs/scQC.yaml` tells the pipeline how to identify organellar and ribosomal genes for each species during QC filtering. Seurat reference atlas and celltype marker references for automated cell-type annotation should be included in this file as well. Edit this file when you add a new species, change organelle definitions, or add new celltype references.
 
-Pre-built multi-species cellranger references exist for:
-- `Arabidopsis thaliana,Capsella rubella`
-- `Arabidopsis thaliana,Arabidopsis lyrata,Capsella rubella,Brassica oleracea`
+Each top-level key is a species name (must match `--species` exactly). Under it, provide **one** of two strategies for mitochondrial and chloroplast genes:
 
-For any other species, supply `--genome` and `--gtf` manually (see below).
+### Strategy 1 — Regex patterns (when gene IDs encode organelle origin)
+
+Use this when organellar genes can be identified by a naming prefix (e.g. *A. thaliana* Araport11 uses `ATMG*` / `ATCG*`).
+
+```yaml
+Arabidopsis thaliana:
+    mitochondrial_pattern: "^ATMG"
+    chloroplast_pattern: "^ATCG"
+    ribosomal_genes: "/path/to/ribosomal_genes.txt"
+    annotation_ref_seurat_obj: "/path/to/reference_atlas.RDS"   # optional
+    celltype_markers: "/path/to/celltype_markers.csv"           # optional
+```
+
+### Strategy 2 — Gene list files (when no naming convention exists)
+
+Provide plain-text files with one gene ID per line.
+
+```yaml
+Brassica oleracea:
+    mitochondrial_genes: "/path/to/mitochondrial_genes.txt"
+    chloroplast_genes: "/path/to/chloroplast_genes.txt"
+    ribosomal_genes: "/path/to/ribosomal_genes.txt"
+```
+
+### Field reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mitochondrial_pattern` | regex | Grep pattern to match mitochondrial gene IDs (e.g. `"^ATMG"`) |
+| `chloroplast_pattern` | regex | Grep pattern to match chloroplast gene IDs (e.g. `"^ATCG"`) |
+| `mitochondrial_genes` | file path | One mitochondrial gene ID per line |
+| `chloroplast_genes` | file path | One chloroplast gene ID per line |
+| `ribosomal_genes` | file path | One ribosomal gene ID per line |
+| `annotation_ref_seurat_obj` | file path | Seurat reference RDS with a `celltype` column for anchor-based label transfer (optional) |
+| `celltype_markers` | file path | CSV file with `gene`, `name`, `clusterName`, `p_val_adj`, `avg_log2FC` columns for celltype marker genes (optional) |
+
+> For each species, use **either** the pattern fields **or** the gene-list fields for mitochondria/chloroplast — not both. Ribosomal genes always require a file. The `annotation_ref_seurat_obj` field and `celltype_markers` field are optional; if omitted, cell-type annotation is skipped.
 
 ---
 
@@ -84,6 +152,14 @@ For any other species, supply `--genome` and `--gtf` manually (see below).
 | `--input`  | Path to samplesheet CSV      |
 | `--out`    | Output directory path        |
 | `--species`| Species name(s), comma-separated (default: `Arabidopsis thaliana`) |
+
+The following species have pre-configured references (genome, GTF, CellRanger index, Seurat reference atlas):
+
+Pre-built multi-species cellranger references exist for:
+- `Arabidopsis thaliana,Capsella rubella`
+- `Arabidopsis thaliana,Arabidopsis lyrata,Capsella rubella,Brassica oleracea`
+
+For any other species, supply `--genome` and `--gtf` manually (see below).
 
 ### Custom Reference (if species not in the list above)
 
@@ -163,50 +239,6 @@ seur_clean_*.rds: Seurat object after all filtering steps with full metadata -> 
 
 ---
 
-## Configuring `scQC.yaml`
-
-The file `refs/scQC.yaml` tells the pipeline how to identify organellar and ribosomal genes for each species during QC filtering. You can also point it to a Seurat reference atlas for automated cell-type annotation. Edit this file when you add a new species or need to change organelle definitions.
-
-Each top-level key is a species name (must match `--species` exactly). Under it, provide **one** of two strategies for mitochondrial and chloroplast genes:
-
-### Strategy 1 — Regex patterns (when gene IDs encode organelle origin)
-
-Use this when organellar genes can be identified by a naming prefix (e.g. *A. thaliana* Araport11 uses `ATMG*` / `ATCG*`).
-
-```yaml
-Arabidopsis thaliana:
-    mitochondrial_pattern: "^ATMG"
-    chloroplast_pattern: "^ATCG"
-    ribosomal_genes: "/path/to/ribosomal_genes.txt"
-    annotation_ref_seurat_obj: "/path/to/reference_atlas.RDS"   # optional
-```
-
-### Strategy 2 — Gene list files (when no naming convention exists)
-
-Provide plain-text files with one gene ID per line.
-
-```yaml
-Brassica oleracea:
-    mitochondrial_genes: "/path/to/mitochondrial_genes.txt"
-    chloroplast_genes: "/path/to/chloroplast_genes.txt"
-    ribosomal_genes: "/path/to/ribosomal_genes.txt"
-```
-
-### Field reference
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `mitochondrial_pattern` | regex | Grep pattern to match mitochondrial gene IDs (e.g. `"^ATMG"`) |
-| `chloroplast_pattern` | regex | Grep pattern to match chloroplast gene IDs (e.g. `"^ATCG"`) |
-| `mitochondrial_genes` | file path | One mitochondrial gene ID per line |
-| `chloroplast_genes` | file path | One chloroplast gene ID per line |
-| `ribosomal_genes` | file path | One ribosomal gene ID per line |
-| `annotation_ref_seurat_obj` | file path | Seurat reference RDS with a `celltype` column for anchor-based label transfer (optional) |
-
-> For each species, use **either** the pattern fields **or** the gene-list fields for mitochondria/chloroplast — not both. Ribosomal genes always require a file. The `annotation_ref_seurat_obj` field is optional; if omitted, cell-type annotation is skipped.
-
----
-
 ## Adding a New Species
 
 Edit `nextflow.config` and add an entry under `params.species_map`:
@@ -225,11 +257,54 @@ If `cellranger` points to an existing directory it will be used directly; otherw
 
 ---
 
-## Help
+## Integrating Multiple Samples
+
+Use `integrate` (entrypoint for `bin/integration.R`) on the per-sample Seurat objects produced by this pipeline (typically `preprocess/seur_clean_*.rds`).
+
+### Usage 
+
+By default, `integrate` automatically uses all `.rds/.RDS` files in the current directory (`.`) and produces all output files in the same directory.
 
 ```bash
-nextflow run jow30/ROMalleyLab-scRNAseq-nf --help
+mkdir integration && cd integration
+ln -s /path/to/exp1/preprocess/seur_clean_*.rds .
+ln -s /path/to/exp2/preprocess/seur_clean_*.rds .
+module load scrnaseq/1.0 && integrate
 ```
+
+Alternatively, you can specify the input Seurat objects explicitly:
+
+```bash
+module load scrnaseq/1.0 && integrate \
+  --inputRds "/path/to/exp1/preprocess/seur_clean_sampleA.rds,/path/to/exp2/preprocess/seur_clean_sampleB.rds" \
+  --resDir "/path/to/integration_results"
+```
+
+See full usage:
+
+```bash
+module load scrnaseq/1.0 && integrate --help
+```
+
+Full usage example:
+
+```bash
+module load scrnaseq/1.0 && integrate \
+  --inputRds "/path/to/exp1/preprocess/seur_clean_sampleA.rds,/path/to/exp2/preprocess/seur_clean_sampleB.rds" \
+  --resDir "/path/to/integration_results" \
+  --integration_method "RPCA" \
+  --nFeatures 3000 \
+  --species "Arabidopsis thaliana" \
+  --memory 16 \
+  --ref_yaml "/path/to/scQC.yaml"
+```
+
+### Outputs
+
+- `seuratObjs_<method>_integrated.rds`
+- `UMAP_bySample.png`, `UMAP_byCluster.png`
+- cluster/sample composition CSV files and percentage barplots
+- optional annotation plots when marker/reference entries are available for the selected species in `--ref_yaml`
 
 ---
 
@@ -283,3 +358,5 @@ Rscript -e "rmarkdown::render(
 ```
 
 Tip: use `cellranger_sel` / `seur_sel` to include only selected samples without moving any files.
+
+---

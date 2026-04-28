@@ -24,7 +24,7 @@ option_list <- list(
   make_option(c("--ref_yaml"),
               type = "character",
               default = "/project/gzy8899/qiaoshan/scRNAseq/references/scQC.yaml",
-              help = "The reference organelle gene lists of all available species curated in yaml [default = %default]"),
+              help = "The organelle gene lists and annotation references of all available species curated in yaml [default = %default]"),
 
   make_option(c("--min_unsplice_ratio"),
               type = "numeric",
@@ -154,6 +154,11 @@ if (opt$species %in% names(qc_patterns)) {
     seur_ref = readRDS(qc_patterns[[opt$species]]$annotation_ref_seurat_obj)
   }else{
     seur_ref = NULL
+  }
+  if(!is.null(qc_patterns[[opt$species]]$celltype_markers)) {
+    marker_ref = read.csv(qc_patterns[[opt$species]]$celltype_markers)
+  }else{
+    marker_ref = NULL
   }
 } else {
   stop("###ERROR### This species is absent from the reference yaml. Please add mitochondrial/chloroplast/ribosomal genes to ref.yaml\n")
