@@ -303,8 +303,11 @@ module load scrnaseq/1.0 && integrate \
 
 - `seuratObjs_<method>_integrated.rds`
 - `UMAP_bySample.png`, `UMAP_byCluster.png`
+- Violin plots of nCount_RNA, nFeature_RNA for each cluster
 - cluster/sample composition CSV files and percentage barplots
 - optional annotation plots when marker/reference entries are available for the selected species in `--ref_yaml`
+
+> Note: Plot files named with `Celltype` are anchor-based annotation, while those named with `MarkerBasedCelltype` are marker-based annotation.
 
 ---
 
