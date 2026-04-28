@@ -315,7 +315,7 @@ module load scrnaseq/1.0 && integrate \
 
 ### What if I want to use different cutoff values for different samples?
 
-You can run each sample in a separate nextflow run with different cutoff values. Then you can generate the [combined summary report](./#how-can-i-build-one-summary-report-across-samples-from-different-experiments) to compare the results across samples.
+You can run each sample in a separate nextflow run with different cutoff values. Then you can generate the [combined summary report](#how-can-i-build-one-summary-report-across-samples-from-different-experiments) to compare the results across samples.
 
 
 ### How can I build one summary report across samples from different experiments?
