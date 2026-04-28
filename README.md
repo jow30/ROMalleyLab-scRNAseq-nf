@@ -264,8 +264,9 @@ The pipeline will build the combined reference from the given species references
 └── preprocess/          # Processed seurat objects, HTML summary report, and other results
 ```
 
-seur_diem_*.rds: Seurat object after DIEM filtering with full metadata (including debris score, unsplicing ratio, doublet score, etc.) -> good for exploring different filtering cutoffs
-seur_clean_*.rds: Seurat object after all filtering steps with full metadata -> good for downstream analysis like integration and differential analysis
+**seur_diem_*.rds:** Seurat object after DIEM filtering with full metadata (including debris score, unsplicing ratio, doublet score, etc.) -> good for exploring different filtering cutoffs
+
+**seur_clean_*.rds:** Seurat object after all filtering steps with full metadata -> good for downstream analysis like integration and differential analysis
 
 ---
 
