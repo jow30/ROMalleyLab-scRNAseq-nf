@@ -2,6 +2,21 @@
 
 A Nextflow pipeline for processing single-nucleus RNA sequencing data from plants. It runs end-to-end: reference preparation → CellRanger count → read counting → filtering/demultiplexing → summary report.
 
+## Table of Contents
+- [Requirements](#requirements)
+- [Bash Environment Preset](#bash-environment-preset)
+- [Quick Start](#quick-start)
+- [Samplesheet Format](#samplesheet-format)
+- [Configuring `scQC.yaml`](#configuring-scqcyaml)
+- [Parameters](#parameters)
+- [Output Structure](#output-structure)
+- [Pipeline Steps](#pipeline-steps)
+- [Adding a New Species](#adding-a-new-species)
+- [Integrating Multiple Samples](#integrating-multiple-samples)
+- [Q&A](#qa)
+  - [What if I want to use different cutoff values for different samples?](#what-if-i-want-to-use-different-cutoff-values-for-different-samples)
+  - [How can I build one summary report across samples from different experiments?](#how-can-i-build-one-summary-report-across-samples-from-different-experiments)
+
 ---
 
 ## Requirements
