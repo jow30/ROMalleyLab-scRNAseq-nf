@@ -6,8 +6,6 @@ A Nextflow pipeline for processing single-nucleus RNA sequencing data from plant
 - [Bash Environment Preset](#bash-environment-preset)
 - [Quick Start](#quick-start)
 - [Parameters](#parameters)
-- [Samplesheet Format](#samplesheet-format)
-- [Species Configuration](#species-configuration)
 - [Output Structure](#output-structure)
 - [Pipeline Steps](#pipeline-steps)
 - [Integration](#integration)
@@ -54,6 +52,8 @@ Require modules for this pipeline:
 
 ## Quick Start
 
+For single-species:
+
 ```bash
 module load nextflow/25.10.4
 nextflow run jow30/ROMalleyLab-scRNAseq-nf \
@@ -75,7 +75,11 @@ nextflow run jow30/ROMalleyLab-scRNAseq-nf \
 Resume a run after an interruption:
 
 ```bash
-nextflow run jow30/ROMalleyLab-scRNAseq-nf --input samplesheet.csv --out exp1-nf-results {$otherParams} -resume
+nextflow run jow30/ROMalleyLab-scRNAseq-nf \
+  --input samplesheet.csv \
+  --out exp1-nf-results \
+  {$otherParams} \
+  -resume
 ```
 
 ---
@@ -90,7 +94,7 @@ nextflow run jow30/ROMalleyLab-scRNAseq-nf --help
 
 ## Parameters
 
-### Mandatory
+### Mandatory Parameters
 
 | Parameter  | Description                  |
 |------------|------------------------------|
@@ -98,71 +102,7 @@ nextflow run jow30/ROMalleyLab-scRNAseq-nf --help
 | `--out`    | Output directory path        |
 | `--species`| Species name(s), comma-separated (default: `Arabidopsis thaliana`) |
 
-The following species have pre-configured references (genome, GTF, CellRanger index, Seurat reference atlas):
-
-Pre-built multi-species cellranger references exist for:
-- `Arabidopsis thaliana,Capsella rubella`
-- `Arabidopsis thaliana,Arabidopsis lyrata,Capsella rubella,Brassica oleracea`
-
-For any other species, supply `--genome` and `--gtf` manually (see below).
-
-### Custom Reference (if species not in the list above)
-
-| Parameter  | Description                          |
-|------------|--------------------------------------|
-| `--genome` | Path to genome FASTA file            |
-| `--gtf`    | Path to annotation file (`.gtf`, `.gff3`, or `.gff`) |
-| `--ref_yaml` | Path to scQC YAML which contains information about organelles and annotation references (default: `refs/scQC.yaml`) |
-
-### Library QC
-
-| Parameter                | Default | Description                                                  |
-|--------------------------|---------|--------------------------------------------------------------|
-| `--bin_size`             | `500`   | Window size to count reads for mapping efficiency analysis   |
-
-### Cell Filtering
-
-These thresholds are applied during preprocessing. Defaults work well for most plant snRNA-seq datasets.
-
-| Parameter                | Default | Description                          |
-|--------------------------|---------|--------------------------------------|
-| `--min_diem_debris_score`| `1`     | Minimum DIEM debris score            |
-| `--min_unsplice_ratio`   | `0.1`   | Minimum unspliced/total ratio        |
-| `--min_nCount_RNA`       | `400`   | Minimum UMIs per cell                |
-| `--min_nFeature_RNA`     | `300`   | Minimum genes per cell               |
-| `--max_mt`               | `10`    | Maximum mitochondrial % per cell     |
-| `--max_cp`               | `15`    | Maximum chloroplast % per cell       |
-| `--nHVG`                 | `3000`  | Number of highly variable genes      |
-| `--min_ncell_expr`       | `5`     | Minimum cells expressing a gene      |
-| `--remove_doublet`       | `true`  | Remove doublets                      |
-| `--max_doublet_score`    | `0.4`   | Maximum doublet pANN score           |
-| `--min_nClusterMarker`   | `5`     | Minimum cluster marker genes         |
-| `--min_cells`            | `500`   | Minimum cells required after each filtering step; samples with fewer cells are skipped |
-
-### Multi-species Demultiplexing and Filtering
-
-These parameters only apply when running with multiple species (`--clean chi` is auto-selected for multi-species).
-
-| Parameter                        | Default | Description                                    |
-|----------------------------------|---------|------------------------------------------------|
-| `--clean`                        | auto    | Cleaning method: `diem` (single-species) or `chi` (multi-species) |
-| `--min_UMI_per_cell_barcode`     | `400`   | Minimum UMIs per barcode for chi demultiplexing |
-| `--chisq_pvalues_max`            | `0.01`  | Maximum chi-squared p-value                    |
-| `--ambient_rate_max`             | `0.5`   | Maximum ambient RNA rate                       |
-| `--multiple_species_per_droplet` | `true`  | Allow multi-species droplets                   |
-
-### Cleanup
-
-| Parameter   | Default | Description                          |
-|-------------|---------|--------------------------------------|
-| `--cleanup` | `false` | Cleanup large intermediate files     |
-
----
-
-
-## Samplesheet Format
-
-Provide a CSV with the following columns:
+Samplesheet should be a CSV file with the following columns:
 
 | Column      | Description                                          |
 |-------------|------------------------------------------------------|
@@ -181,18 +121,41 @@ ctrl,/project/gzy8899/data/202510_DAP_10X,RO2_S2_L001_R1_001.fastq.gz,RO2_S2_L00
 
 FASTQ filenames should follow standard Illumina naming: `*_S*_L*_R*_*.fastq.gz`.
 
----
+### Species Configuration
 
-## Species Configuration
+For the given species in `--species`, the pipeline will search for existing reference files in [`refs`](refs) and use them for read mapping, QC filtering and cell-type annotation. 
 
-The file [`refs/scQC.yaml`](refs/scQC.yaml) tells the pipeline how to identify organellar and ribosomal genes for each species during QC filtering. Seurat reference atlas and celltype marker references for automated cell-type annotation should be included in this file as well. Edit this file when you add a new species, change organelle definitions, or add new celltype references.
+The following species are pre-configured in [`refs`](refs):
+- `Arabidopsis thaliana`
+- `Arabidopsis lyrata`
+- `Capsella rubella`
+- `Brassica oleracea`
 
-Each top-level key is a species name (must match `--species` exactly). Under it, provide **one** of two strategies for mitochondrial and chloroplast genes:
+The configured species references include:
+- genome assemblies in FASTA format
+- genome annotations in GTF format
+- CellRanger index folders
+- **A yaml file** which contains organellar and ribosomal gene lists for QC filtering and cell-type annotation reference atlas/markers
 
-### Strategy 1 — Regex patterns (when gene IDs encode organelle origin)
+By default, the pipeline reads the file [`refs/scQC.yaml`](refs/scQC.yaml) to identify organellar and ribosomal genes for each species given in `--species` during QC filtering. Seurat reference atlas and celltype marker references are also included in this file for automated cell-type annotation. ***Edit this file to update organelle gene lists, add new celltype references, or when you [add a new species](#add-a-new-species).***
 
-Use this when organellar genes can be identified by a naming prefix (e.g. *A. thaliana* Araport11 uses `ATMG*` / `ATCG*`).
+#### Config the yaml file
 
+For each species in [`refs/scQC.yaml`](refs/scQC.yaml), use **either** the pattern fields **or** the gene-list fields for mitochondria/chloroplast — not both. Ribosomal genes always require a file. Provide plain-text files with one gene ID per line. The `annotation_ref_seurat_obj` field and `celltype_markers` field are optional; if omitted, cell-type annotation is skipped.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mitochondrial_pattern` | regex | Grep pattern to match mitochondrial gene IDs (e.g. `"^ATMG"`) |
+| `chloroplast_pattern` | regex | Grep pattern to match chloroplast gene IDs (e.g. `"^ATCG"`) |
+| `mitochondrial_genes` | file path | One mitochondrial gene ID per line |
+| `chloroplast_genes` | file path | One chloroplast gene ID per line |
+| `ribosomal_genes` | file path | One ribosomal gene ID per line |
+| `annotation_ref_seurat_obj` | file path | Seurat reference RDS with a `celltype` column for anchor-based label transfer |
+| `celltype_markers` | file path | CSV file with `gene`, `name`, `clusterName`, `p_val_adj`, `avg_log2FC` columns for celltype marker genes |
+
+Please make sure the gene IDs in the gene-list files are consistent with the gene IDs in the genome annotation file.
+
+Example 1:
 ```yaml
 Arabidopsis thaliana:
     mitochondrial_pattern: "^ATMG"
@@ -202,10 +165,7 @@ Arabidopsis thaliana:
     celltype_markers: "/path/to/celltype_markers.csv"           # optional
 ```
 
-### Strategy 2 — Gene list files (when no naming convention exists)
-
-Provide plain-text files with one gene ID per line.
-
+Example 2:
 ```yaml
 Brassica oleracea:
     mitochondrial_genes: "/path/to/mitochondrial_genes.txt"
@@ -213,35 +173,84 @@ Brassica oleracea:
     ribosomal_genes: "/path/to/ribosomal_genes.txt"
 ```
 
-### Field reference
+#### Add a new species
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `mitochondrial_pattern` | regex | Grep pattern to match mitochondrial gene IDs (e.g. `"^ATMG"`) |
-| `chloroplast_pattern` | regex | Grep pattern to match chloroplast gene IDs (e.g. `"^ATCG"`) |
-| `mitochondrial_genes` | file path | One mitochondrial gene ID per line |
-| `chloroplast_genes` | file path | One chloroplast gene ID per line |
-| `ribosomal_genes` | file path | One ribosomal gene ID per line |
-| `annotation_ref_seurat_obj` | file path | Seurat reference RDS with a `celltype` column for anchor-based label transfer (optional) |
-| `celltype_markers` | file path | CSV file with `gene`, `name`, `clusterName`, `p_val_adj`, `avg_log2FC` columns for celltype marker genes (optional) |
-
-> For each species, use **either** the pattern fields **or** the gene-list fields for mitochondria/chloroplast — not both. Ribosomal genes always require a file. The `annotation_ref_seurat_obj` field and `celltype_markers` field are optional; if omitted, cell-type annotation is skipped.
-
-### Adding a New Species
-
-Edit `nextflow.config` and add an entry under `params.species_map`:
+To configure a new species, add an entry under `params.species_map` in [nextflow.config](nextflow.config):
 
 ```groovy
 'My new species': [
     genome:      '/path/to/genome.fa',
     gtf:         '/path/to/annotation.gtf',
-    cellranger:  "${projectDir}/refs/My_new_species/cellranger",  // or null to build on-the-fly
-    seurat_ref:  '/path/to/reference_atlas.RDS',                  // or null
-    markers:     '/path/to/markers.csv'                            // or null
+    cellranger:  "${projectDir}/refs/My_new_species/cellranger"  // or null to build on-the-fly
 ]
 ```
 
-If `cellranger` points to an existing directory it will be used directly; otherwise the pipeline builds it from `genome` and `gtf`.
+If `cellranger` points to an existing directory, it will be used directly. Otherwise, the pipeline builds it from `genome` and `gtf`.
+
+#### Configure multi-species references
+
+Pre-built multi-species references exist for:
+- `Arabidopsis thaliana,Capsella rubella`
+- `Arabidopsis thaliana,Arabidopsis lyrata,Capsella rubella,Brassica oleracea`
+
+To configure a new multi-species reference, add an entry under `params.combined_ref_map` in [nextflow.config](nextflow.config):
+
+```groovy
+'My new species A,My new species B': "${projectDir}/refs/My_new_species_A_B/cellranger"
+```
+
+The pipeline will build the combined reference from the given species references in `params.species_map` and save it to the path specified in `params.combined_ref_map`. If the path already exists, the pipeline will use it directly.
+
+### Optional Parameters
+
+| Parameter  | Description                          |
+|------------|--------------------------------------|
+| `--genome` | Path to genome FASTA file            |
+| `--gtf`    | Path to annotation file (`.gtf`, `.gff3`, or `.gff`) |
+| `--ref_yaml` | Path to scQC YAML which contains information about organelles and annotation references (default: `refs/scQC.yaml`) |
+
+**Library QC:**
+
+| Parameter                | Default | Description                                                  |
+|--------------------------|---------|--------------------------------------------------------------|
+| `--bin_size`             | `500`   | Window size to count reads for mapping efficiency analysis   |
+
+**Cell Filtering:**
+
+These thresholds are applied during preprocessing. Defaults work well for most plant snRNA-seq datasets.
+
+| Parameter                | Default | Description                          |
+|--------------------------|---------|--------------------------------------|
+| `--min_diem_debris_score`| `1`     | Minimum DIEM debris score            |
+| `--min_unsplice_ratio`   | `0.1`   | Minimum unspliced/total ratio        |
+| `--min_nCount_RNA`       | `400`   | Minimum UMIs per cell                |
+| `--min_nFeature_RNA`     | `300`   | Minimum genes per cell               |
+| `--max_mt`               | `10`    | Maximum mitochondrial % per cell     |
+| `--max_cp`               | `15`    | Maximum chloroplast % per cell       |
+| `--nHVG`                 | `3000`  | Number of highly variable genes      |
+| `--min_ncell_expr`       | `5`     | Minimum cells expressing a gene      |
+| `--remove_doublet`       | `true`  | Remove doublets                      |
+| `--max_doublet_score`    | `0.4`   | Maximum doublet pANN score           |
+| `--min_nClusterMarker`   | `5`     | Minimum cluster marker genes         |
+| `--min_cells`            | `500`   | Minimum cells required after each filtering step; samples with fewer cells are skipped |
+
+**Multi-species Demultiplexing and Filtering:**
+
+These parameters only apply when running with multiple species (`--clean chi` is auto-selected for multi-species).
+
+| Parameter                        | Default | Description                                    |
+|----------------------------------|---------|------------------------------------------------|
+| `--clean`                        | auto    | Cleaning method: `diem` (single-species) or `chi` (multi-species) |
+| `--min_UMI_per_cell_barcode`     | `400`   | Minimum UMIs per barcode for chi demultiplexing |
+| `--chisq_pvalues_max`            | `0.01`  | Maximum chi-squared p-value                    |
+| `--ambient_rate_max`             | `0.5`   | Maximum ambient RNA rate                       |
+| `--multiple_species_per_droplet` | `true`  | Allow multi-species droplets                   |
+
+**Cleanup:**
+
+| Parameter   | Default | Description                          |
+|-------------|---------|--------------------------------------|
+| `--cleanup` | `true`  | Cleanup large intermediate files     |
 
 ---
 
