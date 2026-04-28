@@ -121,6 +121,57 @@ ctrl,/project/gzy8899/data/202510_DAP_10X,RO2_S2_L001_R1_001.fastq.gz,RO2_S2_L00
 
 FASTQ filenames should follow standard Illumina naming: `*_S*_L*_R*_*.fastq.gz`.
 
+### Optional Parameters
+
+| Parameter  | Description                          |
+|------------|--------------------------------------|
+| `--genome` | Path to genome FASTA file            |
+| `--gtf`    | Path to annotation file (`.gtf`, `.gff3`, or `.gff`) |
+| `--ref_yaml` | Path to scQC YAML which contains information about organelles and annotation references (default: `refs/scQC.yaml`) |
+
+**Library QC:**
+
+| Parameter                | Default | Description                                                  |
+|--------------------------|---------|--------------------------------------------------------------|
+| `--bin_size`             | `500`   | Window size to count reads for mapping efficiency analysis   |
+
+**Cell Filtering:**
+
+These thresholds are applied during preprocessing. Defaults work well for most plant snRNA-seq datasets.
+
+| Parameter                | Default | Description                          |
+|--------------------------|---------|--------------------------------------|
+| `--min_diem_debris_score`| `1`     | Minimum DIEM debris score            |
+| `--min_unsplice_ratio`   | `0.1`   | Minimum unspliced/total ratio        |
+| `--min_nCount_RNA`       | `400`   | Minimum UMIs per cell                |
+| `--min_nFeature_RNA`     | `300`   | Minimum genes per cell               |
+| `--max_mt`               | `10`    | Maximum mitochondrial % per cell     |
+| `--max_cp`               | `15`    | Maximum chloroplast % per cell       |
+| `--nHVG`                 | `3000`  | Number of highly variable genes      |
+| `--min_ncell_expr`       | `5`     | Minimum cells expressing a gene      |
+| `--remove_doublet`       | `true`  | Remove doublets                      |
+| `--max_doublet_score`    | `0.4`   | Maximum doublet pANN score           |
+| `--min_nClusterMarker`   | `5`     | Minimum cluster marker genes         |
+| `--min_cells`            | `500`   | Minimum cells required after each filtering step; samples with fewer cells are skipped |
+
+**Multi-species Demultiplexing and Filtering:**
+
+These parameters only apply when running with multiple species (`--clean chi` is auto-selected for multi-species).
+
+| Parameter                        | Default | Description                                    |
+|----------------------------------|---------|------------------------------------------------|
+| `--clean`                        | auto    | Cleaning method: `diem` (single-species) or `chi` (multi-species) |
+| `--min_UMI_per_cell_barcode`     | `400`   | Minimum UMIs per barcode for chi demultiplexing |
+| `--chisq_pvalues_max`            | `0.01`  | Maximum chi-squared p-value                    |
+| `--ambient_rate_max`             | `0.5`   | Maximum ambient RNA rate                       |
+| `--multiple_species_per_droplet` | `true`  | Allow multi-species droplets                   |
+
+**Cleanup:**
+
+| Parameter   | Default | Description                          |
+|-------------|---------|--------------------------------------|
+| `--cleanup` | `true`  | Cleanup large intermediate files     |
+
 ### Species Configuration
 
 For the given species in `--species`, the pipeline will search for existing reference files in [`refs`](refs) and use them for read mapping, QC filtering and cell-type annotation. 
@@ -175,7 +226,7 @@ Brassica oleracea:
 
 #### Add a new species
 
-To configure a new species, add an entry under `params.species_map` in [nextflow.config](nextflow.config):
+To configure a new species, firt, add an entry under `params.species_map` in [nextflow.config](nextflow.config):
 
 ```groovy
 'My new species': [
@@ -186,6 +237,8 @@ To configure a new species, add an entry under `params.species_map` in [nextflow
 ```
 
 If `cellranger` points to an existing directory, it will be used directly. Otherwise, the pipeline builds it from `genome` and `gtf`.
+
+Second, update the [`refs/scQC.yaml`](refs/scQC.yaml) file to include the new species. Please make sure the gene IDs in the gene-list files and the genome annotation file are consistent with the gene IDs in the annotation file.
 
 #### Configure multi-species references
 
@@ -200,57 +253,6 @@ To configure a new multi-species reference, add an entry under `params.combined_
 ```
 
 The pipeline will build the combined reference from the given species references in `params.species_map` and save it to the path specified in `params.combined_ref_map`. If the path already exists, the pipeline will use it directly.
-
-### Optional Parameters
-
-| Parameter  | Description                          |
-|------------|--------------------------------------|
-| `--genome` | Path to genome FASTA file            |
-| `--gtf`    | Path to annotation file (`.gtf`, `.gff3`, or `.gff`) |
-| `--ref_yaml` | Path to scQC YAML which contains information about organelles and annotation references (default: `refs/scQC.yaml`) |
-
-**Library QC:**
-
-| Parameter                | Default | Description                                                  |
-|--------------------------|---------|--------------------------------------------------------------|
-| `--bin_size`             | `500`   | Window size to count reads for mapping efficiency analysis   |
-
-**Cell Filtering:**
-
-These thresholds are applied during preprocessing. Defaults work well for most plant snRNA-seq datasets.
-
-| Parameter                | Default | Description                          |
-|--------------------------|---------|--------------------------------------|
-| `--min_diem_debris_score`| `1`     | Minimum DIEM debris score            |
-| `--min_unsplice_ratio`   | `0.1`   | Minimum unspliced/total ratio        |
-| `--min_nCount_RNA`       | `400`   | Minimum UMIs per cell                |
-| `--min_nFeature_RNA`     | `300`   | Minimum genes per cell               |
-| `--max_mt`               | `10`    | Maximum mitochondrial % per cell     |
-| `--max_cp`               | `15`    | Maximum chloroplast % per cell       |
-| `--nHVG`                 | `3000`  | Number of highly variable genes      |
-| `--min_ncell_expr`       | `5`     | Minimum cells expressing a gene      |
-| `--remove_doublet`       | `true`  | Remove doublets                      |
-| `--max_doublet_score`    | `0.4`   | Maximum doublet pANN score           |
-| `--min_nClusterMarker`   | `5`     | Minimum cluster marker genes         |
-| `--min_cells`            | `500`   | Minimum cells required after each filtering step; samples with fewer cells are skipped |
-
-**Multi-species Demultiplexing and Filtering:**
-
-These parameters only apply when running with multiple species (`--clean chi` is auto-selected for multi-species).
-
-| Parameter                        | Default | Description                                    |
-|----------------------------------|---------|------------------------------------------------|
-| `--clean`                        | auto    | Cleaning method: `diem` (single-species) or `chi` (multi-species) |
-| `--min_UMI_per_cell_barcode`     | `400`   | Minimum UMIs per barcode for chi demultiplexing |
-| `--chisq_pvalues_max`            | `0.01`  | Maximum chi-squared p-value                    |
-| `--ambient_rate_max`             | `0.5`   | Maximum ambient RNA rate                       |
-| `--multiple_species_per_droplet` | `true`  | Allow multi-species droplets                   |
-
-**Cleanup:**
-
-| Parameter   | Default | Description                          |
-|-------------|---------|--------------------------------------|
-| `--cleanup` | `true`  | Cleanup large intermediate files     |
 
 ---
 
