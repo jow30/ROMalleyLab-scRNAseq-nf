@@ -1,6 +1,7 @@
 rm(list = ls())
 
 suppressWarnings(suppressPackageStartupMessages(library(optparse)))
+source(Sys.which("utils.R"))
 
 option_list <- list(
   make_option(c("-s", "--sample"),
@@ -23,7 +24,7 @@ option_list <- list(
 
   make_option(c("--ref_yaml"),
               type = "character",
-              default = "/project/gzy8899/qiaoshan/scRNAseq/references/scQC.yaml",
+              default = normalizePath(file.path(get_script_dir(), "..", "refs", "scQC.yaml")),
               help = "The organelle gene lists and annotation references of all available species curated in yaml [default = %default]"),
 
   make_option(c("--min_unsplice_ratio"),

@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 
 suppressWarnings(suppressPackageStartupMessages(library(optparse)))
+source(Sys.which("utils.R"))
 
 option_list <- list(
   make_option(c("-i", "--inputDir"),
@@ -23,7 +24,7 @@ option_list <- list(
   
   make_option(c("--ref_yaml"),
               type = "character",
-              default = "/project/gzy8899/qiaoshan/scRNAseq/references/scQC.yaml",
+              default = normalizePath(file.path(get_script_dir(), "..", "refs", "scQC.yaml")),
               help = "The reference organelle gene lists of all available species curated in yaml [default = %default]"),
   
   make_option(c("--min_UMI_per_cell_barcode"),
