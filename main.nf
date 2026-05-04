@@ -259,30 +259,60 @@ def resolveReference(species_list) {
         def sp = species_list[0]
         def ref_info = params.species_map[sp]
 
-        if (ref_info && file(ref_info.cellranger).isDirectory()) {
-            log.info "Using existing cellranger reference for ${sp}: ${ref_info.cellranger}"
-            return [type: 'existing', ref_path: ref_info.cellranger, gtf: ref_info.gtf]
-        } else if (ref_info) {
-            log.info "Will build cellranger reference for ${sp} from species_map"
-            return [type: 'build_single', species: sp, genome: ref_info.genome, gtf: ref_info.gtf]
-        } else {
+        if (!ref_info) {
             log.error "Cannot resolve reference for species '${sp}'. Please add species '${sp}' to params.species_map in nextflow.config."
             exit 1
         }
-    } else {
-        def species_list_str = species_list.sort().join(',')
-        if (params.combined_ref_map.containsKey(species_list_str) && file(params.combined_ref_map[species_list_str]).isDirectory()) {
-            log.info "Using existing combined cellranger reference: ${params.combined_ref_map[species_list_str]}"
-            return [type: 'existing', ref_path: params.combined_ref_map[species_list_str]]
-        } else if (species_list.every { sp -> params.species_map.containsKey(sp) }) {
-            log.info "Will build combined cellranger reference for: ${species_list_str}"
-            return [type: 'build_multi', species_list: species_list]
-        } else {
-            log.error "Cannot resolve reference for species '${species_list_str}'. Please add all species to params.species_map in nextflow.config."
-            log.error "Available species: ${params.species_map.keySet().join(', ')}"
-            log.error "Missing species: ${species_list.findAll { sp -> !params.species_map.containsKey(sp) }.join(', ')}"
+
+        // Prefer a pre-built cellranger reference if one is configured AND exists on disk
+        if (ref_info.cellranger && file(ref_info.cellranger).isDirectory()) {
+            log.info "Using existing cellranger reference for ${sp}: ${ref_info.cellranger}"
+            return [type: 'existing', ref_path: ref_info.cellranger, gtf: ref_info.gtf]
+        }
+
+        // Otherwise build one — require genome + gtf to be present and to exist
+        if (!ref_info.genome || !ref_info.gtf) {
+            log.error "species_map['${sp}'] is missing required keys. Need 'genome' and 'gtf' (got: ${ref_info})."
             exit 1
         }
+        if (!file(ref_info.genome).exists()) {
+            log.error "Genome FASTA for species '${sp}' not found: ${ref_info.genome}"
+            exit 1
+        }
+        if (!file(ref_info.gtf).exists()) {
+            log.error "GTF for species '${sp}' not found: ${ref_info.gtf}"
+            exit 1
+        }
+        log.info "Will build cellranger reference for ${sp} from species_map"
+        return [type: 'build_single', species: sp, genome: ref_info.genome, gtf: ref_info.gtf]
+
+    } else {
+        def species_list_str = species_list.sort().join(',')
+        def combined_ref = params.combined_ref_map[species_list_str]
+
+        // Prefer a pre-built combined cellranger reference if one is configured AND exists on disk
+        if (combined_ref && file(combined_ref).isDirectory()) {
+            log.info "Using existing combined cellranger reference: ${combined_ref}"
+            return [type: 'existing', ref_path: combined_ref]
+        }
+
+        // Otherwise build one — every species needs a complete species_map entry
+        def missing = species_list.findAll { sp -> !params.species_map.containsKey(sp) }
+        if (missing) {
+            log.error "Cannot resolve reference for species '${species_list_str}'. Missing species in species_map: ${missing.join(', ')}"
+            log.error "Available species: ${params.species_map.keySet().join(', ')}"
+            exit 1
+        }
+        def incomplete = species_list.findAll { sp ->
+            def info = params.species_map[sp]
+            !info?.genome || !info?.gtf
+        }
+        if (incomplete) {
+            log.error "species_map entries for [${incomplete.join(', ')}] must have both 'genome' and 'gtf' keys to build a combined reference."
+            exit 1
+        }
+        log.info "Will build combined cellranger reference for: ${species_list_str}"
+        return [type: 'build_multi', species_list: species_list]
     }
 }
 

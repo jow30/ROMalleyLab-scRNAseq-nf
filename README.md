@@ -232,10 +232,12 @@ UChicago Midway-3 specific reference paths live in [`conf/refs.config`](conf/ref
 To configure a new species, first add an entry under `params.species_map` in your `refs.config`:
 
 ```groovy
-'My new species': [
+params.species_map = [
+  'My new species': [
     genome:      '/path/to/genome.fa',
     gtf:         '/path/to/annotation.gtf',
     cellranger:  "/path/to/cellranger/index"  # or null to build on-the-fly
+  ]
 ]
 ```
 
@@ -243,7 +245,7 @@ If `cellranger` points to an existing directory, it will be used directly. Other
 
 Some databases like Phytozome provide genome annotation files in GFF format. You can use the tool prepareGTF to convert the GFF file to cellranger compatible GTF format. See the [prepareGTF user guide](#how-to-prepare-the-gtf-file) for more details.
 
-Next, update the [`refs/scQC.yaml`](refs/scQC.yaml) file to include the new species. ***Please make sure the gene IDs in the gene-list files and the genome annotation reference files are consistent with the gene IDs in the gtf file.***
+Next, create your own yaml file to include the new species following the format in [`refs/scQC.yaml`](refs/scQC.yaml). ***Please make sure the gene IDs in the gene-list files and the genome annotation reference files are consistent with the gene IDs in the gtf file.*** Then apply `--ref_yaml /path/to/your/yaml` to your nextflow run.
 
 #### Configure multi-species references
 
@@ -251,12 +253,14 @@ Pre-built multi-species references exist for:
 - `Arabidopsis thaliana,Capsella rubella`
 - `Arabidopsis thaliana,Arabidopsis lyrata,Capsella rubella,Brassica oleracea`
 
-To configure a multi-species reference for the first time, make sure all species in `--species` are included in `params.species_map`. The pipeline will build the combined reference from the given species references (genome and gtf files) in `params.species_map`, and save it to your nextflow run output directory named as `<species_list>/cellranger/`. 
+To configure a multi-species reference for the first time, make sure all species in `--species` are included in `params.species_map`. The pipeline will build the combined reference from the given species references (genome and gtf files) in `params.species_map`, and save it to your nextflow run output directory named as `refs/<species_list>/cellranger/`. 
 
 To use the multi-species reference for the next time, you can add an entry under `params.combined_ref_map` in [`conf/refs.config`](conf/refs.config) or your own `refs.config`:
 
 ```groovy
-'My new species A,My new species B': "${projectDir}/refs/My_new_species_A_B/cellranger"
+params.combined_ref_map = [
+  'My new species A,My new species B': "${projectDir}/refs/My_new_species_A_B/cellranger"
+]
 ```
 
 ---
