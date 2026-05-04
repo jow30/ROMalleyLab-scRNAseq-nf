@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# =============================================================================
+# prepareGTF
+# -----------------------------------------------------------------------------
+# Generate a standardized, cellranger-ready GTF from a genome annotation file.
+#
+# Pipeline:
+#   1. (only when input is GFF/GFF3) GFF -> GTF via `agat_convert_sp_gff2gtf.pl`.
+#   2. Filter to cellranger-relevant biotypes via `cellranger mkgtf`.
+#
+# The output `<prefix>.flt.gtf` is suitable as the `--genes=...` argument to
+# `cellranger mkref`. When the input is GFF, the intermediate unfiltered
+# `<prefix>.gtf` is also written next to it.
+#
+# Required tools on PATH (or loaded via `module load`):
+#   - agat_convert_sp_gff2gtf.pl   (only for GFF/GFF3 input)
+#   - cellranger                   (unless --skip-filter is passed)
+#
+# On UChicago Midway-3, this is typically:
+#   module load agat/1.5.0 cellranger/9.0.1
+# =============================================================================
+
+set -euo pipefail
+
+# ── Defaults ─────────────────────────────────────────────────────────────────
+DEFAULT_BIOTYPES=(
+    protein_coding
+    lncRNA
+    miRNA
+    snoRNA
+    snRNA
+)
+
+input=""
+outdir="."
+prefix=""
+skip_filter=false
+biotypes=("${DEFAULT_BIOTYPES[@]}")
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+script_name="$(basename "$0")"
+
+usage() {
+    cat <<EOF
+Usage:
+  ${script_name} -i <input.gff|input.gff3|input.gtf> [-o <outdir>] [options]
+
+Generate a cellranger-ready GTF from a GFF/GFF3/GTF annotation file.
+
+Required:
+  -i, --input <file>         Input GFF, GFF3, or GTF file.
+
+Optional:
+  -o, --outdir <dir>         Output directory (default: current directory).
+  -p, --prefix <name>        Output filename prefix.
+                             Default: input basename with .gff/.gff3/.gtf
+                             extensions stripped.
+      --biotypes <list>      Comma-separated biotype values to retain in the
+                             cellranger mkgtf step. Applied to both gene_biotype
+                             and transcript_biotype attributes.
+                             Default: $(IFS=,; echo "${DEFAULT_BIOTYPES[*]}")
+      --skip-filter          Skip the cellranger mkgtf biotype-filtering step.
+                             Output is just the (converted) GTF.
+  -h, --help                 Show this help message and exit.
+
+Examples:
+  # GFF3 -> filtered GTF (default biotypes)
+  ${script_name} -i Athaliana.gff3 -o refs/Athaliana
+
+  # GTF only (skip AGAT step), keep only protein_coding + lncRNA
+  ${script_name} -i Athaliana.gtf --biotypes protein_coding,lncRNA
+
+  # Run the conversion only, no biotype filter
+  ${script_name} -i Athaliana.gff3 --skip-filter
+EOF
+}
+
+die() {
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+require_tool() {
+    local tool="$1" hint="$2"
+    if ! command -v "${tool}" >/dev/null 2>&1; then
+        die "'${tool}' not found on PATH. ${hint}"
+    fi
+}
+
+# ── Parse args ───────────────────────────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -i|--input)        input="$2"; shift 2 ;;
+        -o|--outdir)       outdir="$2"; shift 2 ;;
+        -p|--prefix)       prefix="$2"; shift 2 ;;
+        --biotypes)
+            IFS=',' read -r -a biotypes <<< "$2"
+            shift 2
+            ;;
+        --skip-filter)     skip_filter=true; shift ;;
+        -h|--help)         usage; exit 0 ;;
+        --)                shift; break ;;
+        -*)                die "Unknown option: $1 (use -h for help)" ;;
+        *)                 die "Unexpected positional argument: $1 (use -h for help)" ;;
+    esac
+done
+
+# ── Validate args ────────────────────────────────────────────────────────────
+[[ -n "${input}" ]] || { usage >&2; die "--input is required."; }
+[[ -f "${input}" ]] || die "Input file not found: ${input}"
+
+case "${input,,}" in
+    *.gff|*.gff3) is_gff=true ;;
+    *.gtf)        is_gff=false ;;
+    *)            die "Input must end in .gff, .gff3, or .gtf (got: ${input})" ;;
+esac
+
+if [[ ${#biotypes[@]} -eq 0 ]]; then
+    die "--biotypes list cannot be empty."
+fi
+
+mkdir -p "${outdir}"
+abs_outdir="$(cd "${outdir}" && pwd)"
+
+if [[ -z "${prefix}" ]]; then
+    base="$(basename "${input}")"
+    base="${base%.gff3}"
+    base="${base%.gff}"
+    base="${base%.gtf}"
+    base="${base%.gene}"
+    prefix="${base}"
+fi
+
+intermediate_gtf="${abs_outdir}/${prefix}.gtf"
+filtered_gtf="${abs_outdir}/${prefix}.flt.gtf"
+
+# ── Tool availability checks ─────────────────────────────────────────────────
+if ${is_gff}; then
+    require_tool agat_convert_sp_gff2gtf.pl \
+        "Install AGAT (https://github.com/NBISweden/AGAT) or run 'module load agat' before invoking this script."
+fi
+if ! ${skip_filter}; then
+    require_tool cellranger \
+        "Install cellranger (https://www.10xgenomics.com/support/software/cell-ranger) or run 'module load cellranger' before invoking this script."
+fi
+
+# ── Step 1: GFF -> GTF (if needed) ───────────────────────────────────────────
+if ${is_gff}; then
+    echo "[prepareGTF] Converting GFF to GTF: ${input} -> ${intermediate_gtf}"
+    agat_convert_sp_gff2gtf.pl --gff "${input}" -o "${intermediate_gtf}"
+else
+    echo "[prepareGTF] Input is GTF; copying to ${intermediate_gtf}"
+    cp -f "${input}" "${intermediate_gtf}"
+fi
+
+# ── Step 2: cellranger mkgtf biotype filter ──────────────────────────────────
+if ${skip_filter}; then
+    echo "[prepareGTF] --skip-filter set; final output: ${intermediate_gtf}"
+    exit 0
+fi
+
+attr_args=()
+for bt in "${biotypes[@]}"; do
+    attr_args+=("--attribute=gene_biotype:${bt}")
+done
+for bt in "${biotypes[@]}"; do
+    attr_args+=("--attribute=transcript_biotype:${bt}")
+done
+
+echo "[prepareGTF] Filtering biotypes (${biotypes[*]}) -> ${filtered_gtf}"
+cellranger mkgtf "${intermediate_gtf}" "${filtered_gtf}" "${attr_args[@]}"
+
+echo "[prepareGTF] Done."
+echo "  intermediate : ${intermediate_gtf}"
+echo "  final        : ${filtered_gtf}"

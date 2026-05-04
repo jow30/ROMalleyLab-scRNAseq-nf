@@ -1,21 +1,6 @@
 /*
  * Multi-species snRNAseq workflow
  *
- * Output structure
- * ────────────────
- *   output/
- *   ├── cellranger/<sample>/
- *   └── demultiplex/
- *       └── <sp_dir>/
- *           ├── cellranger/
- *           │   └── <sample>/
- *           │       ├── raw_feature_bc_matrix/    (DEMULTIPLEX process)
- *           │       └── outs/
- *           │           ├── possorted_genome_bam.bam    (DEMUX_BAM)
- *           │           └── possorted_genome_bam.bam.bai
- *           ├── preprocess/
- *           └── integration/
- *
  * Channel key convention: "${sp_dir}:::${sample_id}"
  * ":::" cannot appear in validated species/sample names.
  */
@@ -35,7 +20,7 @@ workflow MULTI_SPECIES_WF {
     transcriptome_ch   // path to combined cellranger reference
     species_list       // list of species names
     clean_method       // 'diem' or 'chi'  — plain Groovy string
-    anno_map           // Map[ species_name -> [gtf, markers, seurat_ref] ]
+    gtf_map            // Map[ species_name -> gtf_path ] (plain Groovy Map)
 
     main:
     def species_csv = species_list.join(',')
@@ -82,7 +67,7 @@ workflow MULTI_SPECIES_WF {
         // Run DIEM_DEBRIS_REMOVAL on each demuxed species/sample matrix.
         // Derived from demux_matrices (DEMULTIPLEX_PROCESS output) — not from DEMUX_BAM —
         // so DIEM only starts after DEMULTIPLEX_PROCESS has finished publishing the matrices.
-        // mat staged path: <sp_dir>/cellranger/<sample_id>/raw_feature_bc_matrix
+        // mat staged path: <sp_dir>/cellranger/<sample_id>/outs/raw_feature_bc_matrix
         def diem_input_ch = DEMULTIPLEX.out.demux_matrices
             .flatMap { sid, matrices ->
                 (matrices instanceof List ? matrices : [matrices]).collect { mat ->
@@ -90,7 +75,10 @@ workflow MULTI_SPECIES_WF {
                     def sp_dir_name = mat.parent.parent.parent.parent.name
                     def sp          = species_list.find { it.replaceAll(' ', '_') == sp_dir_name }
                     def display_sp  = sp ?: sp_dir_name.replaceAll('_', ' ')
-                    def matrix_dir  = file("${demux_base_abs}/${sp_dir_name}/cellranger/${sid}/outs").toAbsolutePath().toString()
+                    // def matrix_dir  = file("${demux_base_abs}/${sp_dir_name}/cellranger/${sid}/outs").toAbsolutePath().toString()
+                    // Use staged path from DEMULTIPLEX output (mat.parent = outs/)
+                    // to avoid race-prone dependency on publishDir under ${params.out}.
+                    def matrix_dir  = mat.parent
                     def pub_dir     = "${demux_base_abs}/${sp_dir_name}/preprocess"
                     [sid, sp_dir_name, matrix_dir, display_sp, pub_dir]
                 }
@@ -120,20 +108,19 @@ workflow MULTI_SPECIES_WF {
 
         def rds_flat = DEMULTIPLEX.out.rds_files
             .flatMap { sid, rds_list ->
-                def entries = []
-                for (sp in species_list) {
+                def all_rds = (rds_list instanceof List ? rds_list : [rds_list])
+                species_list.findResults { sp ->
                     def sp_dir_name  = sp.replaceAll(' ', '_')
-                    def sp_rds       = (rds_list instanceof List ? rds_list : [rds_list])
-                        .findAll { it.parent.parent.name == sp_dir_name }
-                    def seur_obj     = sp_rds.find { it.name == "seur_objs_${sid}.rds" }
-                    def summary_dims = sp_rds.find { it.name == "summary_dims_${sid}.rds" }
-                    def summary_tbs  = sp_rds.find { it.name == "summary_tbs_${sid}.rds" }
-                    def summary_plts = sp_rds.find { it.name == "summary_plts_${sid}.rds" }
+                    def sp_rds       = all_rds.findAll { rds -> rds.parent.parent.name == sp_dir_name }
+                    def seur_obj     = sp_rds.find { rds -> rds.name == "seur_objs_${sid}.rds" }
+                    def summary_dims = sp_rds.find { rds -> rds.name == "summary_dims_${sid}.rds" }
+                    def summary_tbs  = sp_rds.find { rds -> rds.name == "summary_tbs_${sid}.rds" }
+                    def summary_plts = sp_rds.find { rds -> rds.name == "summary_plts_${sid}.rds" }
                     if (seur_obj && summary_dims && summary_tbs && summary_plts) {
-                        entries << ["${sp_dir_name}:::${sid}", seur_obj, summary_dims, summary_tbs, summary_plts]
+                        return ["${sp_dir_name}:::${sid}", seur_obj, summary_dims, summary_tbs, summary_plts]
                     }
+                    return null
                 }
-                return entries
             }
 
         preprocess_rds_ch = bc_flat
@@ -145,7 +132,7 @@ workflow MULTI_SPECIES_WF {
     def gtf_ch = demux_dirs_flat.map { key, d ->
         def sp_dir_name = d.parent.parent.name
         def sp = species_list.find { it.replaceAll(' ', '_') == sp_dir_name }
-        [key, file(anno_map[sp].gtf)]
+        [key, gtf_map[sp]]
     }
 
     def species_ch = demux_dirs_flat.map { key, d ->

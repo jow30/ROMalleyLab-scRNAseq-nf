@@ -2,7 +2,7 @@ process CELLRANGER_MKREF_MULTI {
     tag "${species_dir}"
     label 'process_high'
     label 'cellranger'
-    publishDir "${projectDir}/refs/${species_dir}", mode: 'copy'
+    publishDir "${params.out}/refs/${species_dir}", mode: 'copy'
 
     input:
     val genome_args   // list of '--genome=X --fasta=Y --genes=Z' strings

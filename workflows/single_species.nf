@@ -15,7 +15,7 @@ workflow SINGLE_SPECIES_WF {
     sample_ch          // [ sample_id, fastq_dir, fastq_prefix ]
     transcriptome_ch   // path to cellranger reference
     species_name       // string
-    gtf_file           // path to GTF file for velocyto
+    gtf_file_ch        // channel emitting path to GTF file for velocyto
 
     main:
     def preprocess_dir = file("${params.out}/preprocess").toAbsolutePath().toString()
@@ -56,7 +56,9 @@ workflow SINGLE_SPECIES_WF {
     // Per-sample publish-dir channels (same dir for all samples in single-species)
     def preprocess_pub_ch  = cr_barrier_ch.map { sid, dir -> [sid, preprocess_dir] }
     def cellranger_pub_ch  = cr_barrier_ch.map { sid, dir -> [sid, cellranger_dir] }
-    def gtf_ch             = cr_barrier_ch.map { sid, dir -> [sid, gtf_file] }
+    def gtf_ch             = cr_barrier_ch
+        .combine(gtf_file_ch)
+        .map { sid, dir, gtf_file -> [sid, gtf_file] }
     def species_ch         = cr_barrier_ch.map { sid, dir -> [sid, species_name] }
 
     // ── Shared downstream subworkflow ─────────────────────────────────────────

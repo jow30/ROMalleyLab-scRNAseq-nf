@@ -18,7 +18,7 @@ process DIEM_DEBRIS_REMOVAL {
     publishDir "${publish_dir}", mode: 'copy', saveAs: { fn -> fn.startsWith('summary_') || fn.startsWith('seur_diem_barcodes_') || fn.startsWith('seur_objs_') ? null : fn }
 
     input:
-    tuple val(sample_id), val(sp_dir), val(input_path), val(species_name), val(publish_dir)
+    tuple val(sample_id), val(sp_dir), path(input_path), val(species_name), val(publish_dir)
 
     output:
     tuple val(sample_id), val(sp_dir), path("seur_diem_barcodes_${sample_id}.tsv.gz"), emit: barcodes

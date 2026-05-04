@@ -174,25 +174,21 @@ These parameters only apply when running with multiple species (`--clean chi` is
 
 ### Species Configuration
 
-For the given species in `--species`, the pipeline will search for existing reference files in [`refs`](refs) and use them for read mapping, QC filtering and cell-type annotation. 
+For the given species in `--species`, the pipeline will search for existing reference files in [`conf/refs.config`](conf/refs.config) and [`refs/scQC.yaml`](refs/scQC.yaml) and use them for read mapping, QC filtering and cell-type annotation. 
 
-The following species are pre-configured in [`refs`](refs):
+The following species are pre-configured on UChicago Midway-3:
 - `Arabidopsis thaliana`
 - `Arabidopsis lyrata`
 - `Capsella rubella`
 - `Brassica oleracea`
 
-The configured species references include:
-- genome assemblies in FASTA format
-- genome annotations in GTF format
-- CellRanger index folders
-- **A yaml file** which contains organellar and ribosomal gene lists for QC filtering and cell-type annotation reference atlas/markers
+By default, the pipeline reads the file [`refs/scQC.yaml`](refs/scQC.yaml) to identify organellar and ribosomal genes for each species given in `--species` during QC filtering. Seurat reference atlas and celltype marker references are also included in this file for automated cell-type annotation. 
 
-By default, the pipeline reads the file [`refs/scQC.yaml`](refs/scQC.yaml) to identify organellar and ribosomal genes for each species given in `--species` during QC filtering. Seurat reference atlas and celltype marker references are also included in this file for automated cell-type annotation. ***Edit this file to update organelle gene lists, add new celltype references, or when you [add a new species](#add-a-new-species).***
+***Write your own yaml file and apply `--ref_yaml` to update organelle gene lists, add new celltype references, or when you [add a new species](#add-a-new-species).***
 
 #### Config the yaml file
 
-For each species in [`refs/scQC.yaml`](refs/scQC.yaml), use **either** the pattern fields **or** the gene-list fields for mitochondria/chloroplast — not both. Ribosomal genes always require a file. Provide plain-text files with one gene ID per line. The `annotation_ref_seurat_obj` field and `celltype_markers` field are optional; if omitted, cell-type annotation is skipped.
+For each species in [`refs/scQC.yaml`](refs/scQC.yaml) or your own yaml file, valid fields and their corresponding descriptions are as follows. 
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -204,7 +200,10 @@ For each species in [`refs/scQC.yaml`](refs/scQC.yaml), use **either** the patte
 | `annotation_ref_seurat_obj` | file path | Seurat reference RDS with a `celltype` column for anchor-based label transfer |
 | `celltype_markers` | file path | CSV file with `gene`, `name`, `clusterName`, `p_val_adj`, `avg_log2FC` columns for celltype marker genes |
 
-Please make sure the gene IDs in the gene-list files are consistent with the gene IDs in the genome annotation file.
+- Use **either** the pattern fields **or** the gene-list fields for mitochondria/chloroplast — not both. Ribosomal genes always require a file. 
+- Provide plain-text files with one gene ID per line for mitochondria/chloroplast/ribosomal genes. 
+- The `annotation_ref_seurat_obj` field and `celltype_markers` field are optional; if omitted, cell-type annotation is skipped.
+- ***Please make sure the gene IDs in the gene-list files are consistent with the gene IDs in the genome annotation file.***
 
 Example 1:
 ```yaml
@@ -226,19 +225,23 @@ Brassica oleracea:
 
 #### Add a new species
 
-To configure a new species, firt, add an entry under `params.species_map` in [nextflow.config](nextflow.config):
+UChicago Midway-3 specific reference paths live in [`conf/refs.config`](conf/refs.config) (loaded by default). External users should either edit this file, copy it to a new institution-specific config, or supply their own via `-c refs.config` on the command line.
+
+To configure a new species, first add an entry under `params.species_map` in your `refs.config`:
 
 ```groovy
 'My new species': [
     genome:      '/path/to/genome.fa',
     gtf:         '/path/to/annotation.gtf',
-    cellranger:  "${projectDir}/refs/My_new_species/cellranger"  // or null to build on-the-fly
+    cellranger:  "/path/to/cellranger/index"  # or null to build on-the-fly
 ]
 ```
 
 If `cellranger` points to an existing directory, it will be used directly. Otherwise, the pipeline builds it from `genome` and `gtf`.
 
-Second, update the [`refs/scQC.yaml`](refs/scQC.yaml) file to include the new species. Please make sure the gene IDs in the gene-list files and the genome annotation file are consistent with the gene IDs in the annotation file.
+Some databases like Phytozome provide genome annotation files in GFF format. You can use the tool prepareGTF to convert the GFF file to cellranger compatible GTF format. See the [prepareGTF user guide](#how-to-prepare-the-gtf-file) for more details.
+
+Next, update the [`refs/scQC.yaml`](refs/scQC.yaml) file to include the new species. ***Please make sure the gene IDs in the gene-list files and the genome annotation reference files are consistent with the gene IDs in the gtf file.***
 
 #### Configure multi-species references
 
@@ -246,13 +249,13 @@ Pre-built multi-species references exist for:
 - `Arabidopsis thaliana,Capsella rubella`
 - `Arabidopsis thaliana,Arabidopsis lyrata,Capsella rubella,Brassica oleracea`
 
-To configure a new multi-species reference, add an entry under `params.combined_ref_map` in [nextflow.config](nextflow.config):
+To configure a multi-species reference for the first time, make sure all species in `--species` are included in `params.species_map`. The pipeline will build the combined reference from the given species references (genome and gtf files) in `params.species_map`, and save it to your nextflow run output directory named as `<species_list>/cellranger/`. 
+
+To use the multi-species reference for the next time, you can add an entry under `params.combined_ref_map` in [`conf/refs.config`](conf/refs.config) or your own `refs.config`:
 
 ```groovy
 'My new species A,My new species B': "${projectDir}/refs/My_new_species_A_B/cellranger"
 ```
-
-The pipeline will build the combined reference from the given species references in `params.species_map` and save it to the path specified in `params.combined_ref_map`. If the path already exists, the pipeline will use it directly.
 
 ---
 
@@ -337,6 +340,15 @@ module load scrnaseq/1.0 && integrate \
 ---
 
 ## Q&A
+
+### How to prepare the gtf file?
+
+```bash
+module load prepareGTF
+prepareGTF -i /path/to/annotation.gff -o /path/to/annotation.gtf
+```
+
+To see more options, run `prepareGTF -h`.
 
 ### What if I want to use different cutoff values for different samples?
 

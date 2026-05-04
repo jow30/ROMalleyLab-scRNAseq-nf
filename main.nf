@@ -15,8 +15,6 @@ nextflow.enable.dsl = 2
 
 // ── Module includes (reference preparation only) ─────────────────────────────
 
-include { GFF_TO_GTF }            from './modules/local/gff_to_gtf'
-include { CELLRANGER_MKGTF }      from './modules/local/cellranger_mkgtf'
 include { CELLRANGER_MKREF }      from './modules/local/cellranger_mkref'
 include { CELLRANGER_MKREF_MULTI } from './modules/local/cellranger_mkref_multi'
 
@@ -42,8 +40,6 @@ def helpMessage() {
       --species         Species name(s), comma-separated (default: 'Arabidopsis thaliana')
 
     Reference:
-      --genome          Path(s) to genome FASTA (auto-resolved from species if available)
-      --gtf             Path(s) to GTF file(s) (auto-resolved from species if available)
       --ref_yaml        Path to scQC.yaml (default: refs/scQC.yaml)
 
     Filtering (preprocess.R):
@@ -76,11 +72,6 @@ def helpMessage() {
     """.stripIndent()
 }
 
-if (params.help) {
-    helpMessage()
-    exit 0
-}
-
 // ── Parameter validation ────────────────────────────────────────────────────
 
 def validateParams() {
@@ -109,15 +100,13 @@ def validateParams() {
     }
 
     // Parse species list
-    def species_list = params.species.toString().split(',').collect { it.trim() }
+    def species_list = params.species.toString().split(',').collect { token -> token.trim() }
     def n_species = species_list.size()
     def available_species = params.species_map.keySet()
 
-    for (sp in species_list) {
+    species_list.each { sp ->
         if (!(sp in available_species)) {
-            if (!params.genome || !params.gtf) {
-                errors << "ERROR: Species '${sp}' is not available. Either provide an available species or supply --genome and --gtf parameters. Available species: ${available_species.join(', ')}"
-            }
+            errors << "ERROR: Species '${sp}' is not available. Please provide available species names in --species. Available species: ${available_species.join(', ')}"
         }
     }
 
@@ -156,25 +145,11 @@ def validateParams() {
     }
 
     // Boolean parameter validation
-    def rb = params.remove_doublet
-    if (!(rb instanceof Boolean) && !(rb.toString().toLowerCase() in ['true', 'false'])) {
+    if (!(params.remove_doublet.toString().toLowerCase() in ['true', 'false'])) {
         errors << "ERROR: --remove_doublet must be a boolean value (true or false)."
     }
-    def ms = params.multiple_species_per_droplet
-    if (!(ms instanceof Boolean) && !(ms.toString().toLowerCase() in ['true', 'false'])) {
+    if (!(params.multiple_species_per_droplet.toString().toLowerCase() in ['true', 'false'])) {
         errors << "ERROR: --multiple_species_per_droplet must be a boolean value (true or false)."
-    }
-
-    // Validate genome/gtf paths if provided
-    if (params.genome) {
-        params.genome.toString().split(',').each { g ->
-            if (!file(g.trim()).exists()) errors << "ERROR: --genome path not found: ${g.trim()}"
-        }
-    }
-    if (params.gtf) {
-        params.gtf.toString().split(',').each { g ->
-            if (!file(g.trim()).exists()) errors << "ERROR: --gtf path not found: ${g.trim()}"
-        }
     }
 
     // Cross-parameter warnings
@@ -202,11 +177,11 @@ def validateParams() {
     }
 
     // Print warnings
-    for (w in warnings) log.warn(w)
+    warnings.each { warning_msg -> log.warn(warning_msg) }
 
     // Fail on errors
     if (errors) {
-        for (e in errors) log.error(e)
+        errors.each { error_msg -> log.error(error_msg) }
         exit 1
     }
 
@@ -222,11 +197,11 @@ def validateParams() {
 def parseSamplesheet(samplesheet_path) {
     def samples = []
     def lines = file(samplesheet_path).readLines()
-    def header = lines[0].split(',').collect { it.trim() }
+    def header = lines[0].split(',').collect { token -> token.trim() }
 
     // Validate header
     def required_cols = ['sample', 'fastq_dir', 'fastq_R1', 'fastq_R2']
-    for (col in required_cols) {
+    required_cols.each { col ->
         if (!(col in header)) {
             log.error "ERROR: Samplesheet missing required column: ${col}"
             exit 1
@@ -234,14 +209,16 @@ def parseSamplesheet(samplesheet_path) {
     }
 
     def col_idx = [:]
-    for (col in required_cols) {
+    required_cols.each { col ->
         col_idx[col] = header.indexOf(col)
     }
 
-    for (int i = 1; i < lines.size(); i++) {
+    (1..<lines.size()).each { i ->
         def line = lines[i].trim()
-        if (line == '') continue
-        def fields = line.split(',').collect { it.trim() }
+        if (line == '') {
+            return
+        }
+        def fields = line.split(',').collect { token -> token.trim() }
 
         def sample_name = fields[col_idx['sample']]
         def fastq_dir   = fields[col_idx['fastq_dir']]
@@ -284,39 +261,29 @@ def resolveReference(species_list) {
 
         if (ref_info && file(ref_info.cellranger).isDirectory()) {
             log.info "Using existing cellranger reference for ${sp}: ${ref_info.cellranger}"
-            return [type: 'existing', ref_path: ref_info.cellranger]
-        } else if (params.genome && params.gtf) {
-            log.info "Will build cellranger reference for ${sp}"
-            return [type: 'build_single', species: sp, genome: params.genome, gtf: params.gtf]
+            return [type: 'existing', ref_path: ref_info.cellranger, gtf: ref_info.gtf]
         } else if (ref_info) {
             log.info "Will build cellranger reference for ${sp} from species_map"
             return [type: 'build_single', species: sp, genome: ref_info.genome, gtf: ref_info.gtf]
         } else {
-            log.error "Cannot resolve reference for species '${sp}'. Provide --genome and --gtf."
+            log.error "Cannot resolve reference for species '${sp}'. Please add species '${sp}' to params.species_map in nextflow.config."
             exit 1
         }
     } else {
-        def sorted_species = species_list.sort().join(',')
-        if (params.combined_ref_map.containsKey(sorted_species) && file(params.combined_ref_map[sorted_species]).isDirectory()) {
-            log.info "Using existing combined cellranger reference: ${params.combined_ref_map[sorted_species]}"
-            return [type: 'existing', ref_path: params.combined_ref_map[sorted_species]]
-        } else {
-            log.info "Will build combined cellranger reference for: ${species_list.join(', ')}"
+        def species_list_str = species_list.sort().join(',')
+        if (params.combined_ref_map.containsKey(species_list_str) && file(params.combined_ref_map[species_list_str]).isDirectory()) {
+            log.info "Using existing combined cellranger reference: ${params.combined_ref_map[species_list_str]}"
+            return [type: 'existing', ref_path: params.combined_ref_map[species_list_str]]
+        } else if (species_list.every { sp -> params.species_map.containsKey(sp) }) {
+            log.info "Will build combined cellranger reference for: ${species_list_str}"
             return [type: 'build_multi', species_list: species_list]
+        } else {
+            log.error "Cannot resolve reference for species '${species_list_str}'. Please add all species to params.species_map in nextflow.config."
+            log.error "Available species: ${params.species_map.keySet().join(', ')}"
+            log.error "Missing species: ${species_list.findAll { sp -> !params.species_map.containsKey(sp) }.join(', ')}"
+            exit 1
         }
     }
-}
-
-// ── Resolve per-species annotation, GTF, and integration references ─────────
-
-def resolveSpeciesInfo(species_name) {
-    def sp_key   = species_name.replaceAll('_', ' ')
-    def ref_info = params.species_map.containsKey(sp_key) ? params.species_map[sp_key] : null
-    return [
-        gtf:        ref_info?.gtf        ?: (params.gtf ?: ''),
-        markers:    ref_info?.markers    ?: '',
-        seurat_ref: ref_info?.seurat_ref ?: ''
-    ]
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -324,6 +291,12 @@ def resolveSpeciesInfo(species_name) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 workflow {
+
+    // Handle help request inside workflow scope (DSL2-safe).
+    if (params.help) {
+        helpMessage()
+        exit 0
+    }
 
     // Step 1: Validate parameters
     def validated    = validateParams()
@@ -346,74 +319,74 @@ workflow {
 
     // Step 2: Parse samplesheet and create channel
     def samples   = parseSamplesheet(params.input)
-    def sample_ch = Channel.from(samples)
+    def sample_ch = channel.from(samples)
 
-    // Step 3: Resolve reference
-    def ref_info = resolveReference(species_list)
-    def transcriptome_ch
+    // Step 3: Resolve reference + per-species GTF map
+    def ref_info = resolveReference(species_list) 
+    // [type: 'existing', ref_path: '/project/gzy8899/qiaoshan/scRNAseq/refs/Athaliana_Crubella/cellranger'] or 
+    // [type: 'build_single', species: 'Arabidopsis thaliana', genome: '/project/gzy8899/.../Athaliana_447_TAIR10.fa', gtf: '/project/gzy8899/.../Athaliana_447_TAIR10.gene.gtf'] or 
+    // [type: 'build_multi', species_list: ['Arabidopsis thaliana', 'Capsella rubella']]
+    def cellranger_index_ch
+    def gtf_ch
 
     if (ref_info.type == 'existing') {
-        transcriptome_ch = Channel.value(file(ref_info.ref_path))
-    } else if (ref_info.type == 'build_single') {
-        def gtf_path = ref_info.gtf
-        if (gtf_path.endsWith('.gff3') || gtf_path.endsWith('.gff')) {
-            GFF_TO_GTF(Channel.value([ref_info.species, file(gtf_path)]))
-            CELLRANGER_MKGTF(GFF_TO_GTF.out.gtf)
-        } else {
-            CELLRANGER_MKGTF(Channel.value([ref_info.species, file(gtf_path)]))
+        cellranger_index_ch = channel.value(file(ref_info.ref_path))
+        if (!is_multi) {
+            gtf_ch = channel.value(file(ref_info.gtf))
         }
+    } else if (ref_info.type == 'build_single') {
         def species_dir_name = ref_info.species.replaceAll(' ', '_')
         CELLRANGER_MKREF(
-            CELLRANGER_MKGTF.out.filtered_gtf.map { sp, gtf -> [sp, file(ref_info.genome), gtf] },
+            channel.value([ref_info.species, file(ref_info.genome), file(ref_info.gtf)]),
             species_dir_name
         )
-        transcriptome_ch = CELLRANGER_MKREF.out.cellranger_ref.map { sp, ref -> ref }
-    } else {
-        // build_multi
-        def genome_args = species_list.collect { sp ->
-            def sp_info = params.species_map[sp]
+        cellranger_index_ch = CELLRANGER_MKREF.out.cellranger_ref.map { _sp, ref -> ref }
+        gtf_ch = channel.value(file(ref_info.gtf))
+    } else if (ref_info.type == 'build_multi') {
+        def cellranger_args = species_list.collect { sp ->
+            def sp_info     = params.species_map[sp]
+            def gtf_file    = file(sp_info.gtf)
             def genome_name = sp.replaceAll(' ', '_')
-            "--genome=${genome_name} --fasta=${sp_info.genome} --genes=${sp_info.gtf}"
+            "--genome=${genome_name} --fasta=${sp_info.genome} --genes=${gtf_file.name}"
         }
-        def species_dir_name = species_list.collect { it.replaceAll(' ', '_') }.join('_')
-        CELLRANGER_MKREF_MULTI(genome_args, species_dir_name)
-        transcriptome_ch = CELLRANGER_MKREF_MULTI.out.cellranger_ref
+        def cellranger_args_ch = channel.value(cellranger_args)
+
+        def species_dir_name = species_list.collect { sp -> sp.replaceAll(' ', '_') }.join('_')
+        CELLRANGER_MKREF_MULTI(cellranger_args_ch, species_dir_name)
+        cellranger_index_ch = CELLRANGER_MKREF_MULTI.out.cellranger_ref
     }
 
     // Step 4+: Route to single-species or multi-species workflow
     if (!is_multi) {
         def sp   = species_list[0]
-        def info = resolveSpeciesInfo(sp)
-        if (!info.gtf) {
-            log.error "ERROR: Cannot determine GTF file for velocyto. Provide --gtf or add species '${sp}' to species_map."
-            exit 1
-        }
         SINGLE_SPECIES_WF(
             sample_ch,
-            transcriptome_ch,
+            cellranger_index_ch,
             sp,
-            file(info.gtf)
+            gtf_ch
         )
     } else {
-        def anno_map = species_list.collectEntries { sp -> [sp, resolveSpeciesInfo(sp)] }
+        // Per-species GTF lookup (species name -> GTF file path) for downstream
+        // velocyto, etc. Plain Groovy Map (not a channel) so the workflow can
+        // index by species name directly.
+        def gtf_map = species_list.collectEntries { sp ->
+            [(sp): file(params.species_map[sp].gtf)]
+        }
         MULTI_SPECIES_WF(
             sample_ch,
-            transcriptome_ch,
+            cellranger_index_ch,
             species_list,
             clean_method,
-            anno_map
+            gtf_map
         )
     }
-}
 
-// ── Post-run cleanup ─────────────────────────────────────────────────────────
-
-workflow.onComplete {
-    if (params.cleanup && workflow.success) {
-        log.info "Removing large intermediate files (*.bam, *.bai, *.loom) under ${params.out} ..."
-        ['*.bam', '*.bai', '*.loom'].each { pattern ->
-            ['bash', '-c', "find '${params.out}' -name '${pattern}' -delete"].execute().waitFor()
+    // ── Post-run cleanup ─────────────────────────────────────────────────────
+    workflow.onComplete {
+        if (params.cleanup && workflow.success) {
+            log.info "Removing large intermediate files (*.bam, *.bai, *.loom) under ${params.out} ..."
+            ['bash', '-c', "find '${params.out}' \\( -name '*.bam' -o -name '*.bai' -o -name '*.loom' \\) -delete"].execute().waitFor()
+            log.info "Cleanup complete."
         }
-        log.info "Cleanup complete."
     }
 }

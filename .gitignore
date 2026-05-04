@@ -1,2 +1,4 @@
 test/
 .nextflow*
+refs/
+!refs/scQC.yaml
