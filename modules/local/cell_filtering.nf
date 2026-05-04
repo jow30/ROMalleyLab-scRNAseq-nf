@@ -1,6 +1,6 @@
 process CELL_FILTERING {
     tag "${sample_id}"
-    label 'process_high'
+    label 'process_medium'
     label 'scrnaseq'
     stageInMode 'copy'
     publishDir "${publish_dir}", mode: 'copy', saveAs: { fn -> fn.startsWith('summary_') ? null : fn }
