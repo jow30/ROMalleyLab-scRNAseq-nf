@@ -27,7 +27,7 @@ process CELL_FILTERING {
         -S '${species_name}' \\
         -o . \\
         -v ${velocyto_txt} \\
-        --ref_yaml ${params.ref_yaml} \\
+        --ref_yaml ${file(params.ref_yaml)} \\
         --min_unsplice_ratio ${params.min_unsplice_ratio} \\
         --min_nCount_RNA ${params.min_nCount_RNA} \\
         --min_nFeature_RNA ${params.min_nFeature_RNA} \\

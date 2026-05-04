@@ -171,16 +171,13 @@ def validateParams() {
         }
     }
 
-    // Validate ref_yaml and absolutize it: the value is interpolated as a raw
-    // string into process scripts that run from Nextflow's work dir, so a
-    // relative path like 'scQC.yaml' would otherwise fail to resolve there.
-    if (params.ref_yaml) {
-        def ref_yaml_file = file(params.ref_yaml)
-        if (!ref_yaml_file.exists()) {
-            errors << "ERROR: --ref_yaml file not found: ${params.ref_yaml}"
-        } else {
-            params.ref_yaml = ref_yaml_file.toAbsolutePath().toString()
-        }
+    // Validate ref_yaml. NB: do NOT try to mutate params.ref_yaml here —
+    // params is read-only at runtime in modern Nextflow and the assignment
+    // would silently no-op. Modules absolutize via `${file(params.ref_yaml)}`
+    // at script-render time instead, which resolves relative paths against
+    // the launch dir.
+    if (params.ref_yaml && !file(params.ref_yaml).exists()) {
+        errors << "ERROR: --ref_yaml file not found: ${params.ref_yaml}"
     }
 
     // Print warnings

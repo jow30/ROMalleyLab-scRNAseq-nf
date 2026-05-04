@@ -25,7 +25,7 @@ process DEMULTIPLEX {
         -o . \\
         -s ${sample_id} \\
         --species "${species_csv}" \\
-        --ref_yaml ${params.ref_yaml} \\
+        --ref_yaml ${file(params.ref_yaml)} \\
         --min_UMI_per_cell_barcode ${params.min_UMI_per_cell_barcode} \\
         --chisq_pvalues_max ${params.chisq_pvalues_max} \\
         --ambient_rate_max ${params.ambient_rate_max} \\

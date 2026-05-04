@@ -37,7 +37,7 @@ process DIEM_DEBRIS_REMOVAL {
         -s ${sample_id} \\
         -S '${species_name}' \\
         -o . \\
-        --ref_yaml ${params.ref_yaml} \\
+        --ref_yaml ${file(params.ref_yaml)} \\
         --min_diem_debris_score ${params.min_diem_debris_score} \\
         --threads ${task.cpus}
     """
