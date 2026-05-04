@@ -375,9 +375,10 @@ workflow {
     } else if (ref_info.type == 'build_multi') {
         def cellranger_args = species_list.collect { sp ->
             def sp_info     = params.species_map[sp]
-            def gtf_file    = file(sp_info.gtf)
+            def genome_path = file(sp_info.genome).toAbsolutePath()
+            def gtf_path    = file(sp_info.gtf).toAbsolutePath()
             def genome_name = sp.replaceAll(' ', '_')
-            "--genome=${genome_name} --fasta=${sp_info.genome} --genes=${gtf_file.name}"
+            "--genome=${genome_name} --fasta=${genome_path} --genes=${gtf_path}"
         }
         def cellranger_args_ch = channel.value(cellranger_args)
 

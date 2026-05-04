@@ -2,7 +2,7 @@ process CELLRANGER_MKREF {
     tag "${species_name}"
     label 'process_high'
     label 'cellranger'
-    publishDir "${params.out}/ref/${species_dir}", mode: 'copy'
+    publishDir "${params.out}/refs/${species_dir}", mode: 'copy'
 
     input:
     tuple val(species_name), path(genome_fasta), path(filtered_gtf)
