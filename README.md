@@ -127,10 +127,8 @@ FASTQ filenames should follow standard Illumina naming: `*_S*_L*_R*_*.fastq.gz`.
 
 ### Optional Parameters
 
-| Parameter  | Description                          |
-|------------|--------------------------------------|
-| `--genome` | Path to genome FASTA file            |
-| `--gtf`    | Path to annotation file (`.gtf`, `.gff3`, or `.gff`) |
+| Parameter    | Description                                                                                                          |
+|--------------|----------------------------------------------------------------------------------------------------------------------|
 | `--ref_yaml` | Path to scQC YAML which contains information about organelles and annotation references (default: `refs/scQC.yaml`) |
 
 **Library QC:**
