@@ -416,12 +416,24 @@ workflow {
         )
     }
 
-    // ── Post-run cleanup ─────────────────────────────────────────────────────
-    workflow.onComplete {
-        if (params.cleanup && workflow.success) {
-            log.info "Removing large intermediate files (*.bam, *.bai, *.loom) under ${params.out} ..."
-            ['bash', '-c', "find '${params.out}' \\( -name '*.bam' -o -name '*.bai' -o -name '*.loom' \\) -delete"].execute().waitFor()
-            log.info "Cleanup complete."
+    // ── Post-run cleanup ────────────────────────────────────────────────────
+    // Registered inside the entry workflow (required by Nextflow's strict
+    // syntax / v2 parser, which forbids top-level statements) and via the
+    // assignment form `workflow.onComplete = { ... }` rather than the method-
+    // call form `workflow.onComplete { ... }`. Assignment was also the
+    // official workaround for the historical 'workflow/params null in
+    // onComplete' bug (nextflow-io/nextflow#5261, fixed in 24.10), so this
+    // spelling is portable across all supported Nextflow versions.
+    // Wrapped in try/catch so cleanup can never fail the run reporting.
+    workflow.onComplete = {
+        try {
+            if (params.cleanup && workflow.success) {
+                log.info "Removing large intermediate files (*.bam, *.bai, *.loom) under ${params.out} ..."
+                ['bash', '-c', "find '${params.out}' \\( -name '*.bam' -o -name '*.bai' -o -name '*.loom' \\) -delete"].execute().waitFor()
+                log.info "Cleanup complete."
+            }
+        } catch (Throwable t) {
+            log.warn "onComplete cleanup encountered an error (non-fatal): ${t.message}"
         }
     }
 }
