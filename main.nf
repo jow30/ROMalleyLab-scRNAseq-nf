@@ -424,12 +424,20 @@ workflow {
     // official workaround for the historical 'workflow/params null in
     // onComplete' bug (nextflow-io/nextflow#5261, fixed in 24.10), so this
     // spelling is portable across all supported Nextflow versions.
+    //
+    // Pre-bind `params` into local vals so the closure does not access
+    // `params` / `workflow` directly at invocation time — this sidesteps the
+    // residual closure-binding edge case that still triggers the 'Failed to
+    // invoke workflow.onComplete event handler' warning on Nextflow's v1
+    // parser (default in 25.10.x) when a run fails.
     // Wrapped in try/catch so cleanup can never fail the run reporting.
+    def cleanupFlag = params.cleanup
+    def outDir      = params.out
     workflow.onComplete = {
         try {
-            if (params.cleanup && workflow.success) {
-                log.info "Removing large intermediate files (*.bam, *.bai, *.loom) under ${params.out} ..."
-                ['bash', '-c', "find '${params.out}' \\( -name '*.bam' -o -name '*.bai' -o -name '*.loom' \\) -delete"].execute().waitFor()
+            if (cleanupFlag && workflow.success) {
+                log.info "Removing large intermediate files (*.bam, *.bai, *.loom) under ${outDir} ..."
+                ['bash', '-c', "find '${outDir}' \\( -name '*.bam' -o -name '*.bai' -o -name '*.loom' \\) -delete"].execute().waitFor()
                 log.info "Cleanup complete."
             }
         } catch (Throwable t) {

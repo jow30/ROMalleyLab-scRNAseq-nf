@@ -250,7 +250,7 @@ if (any(duplicated(seur_basenames))) {
 }
 
 # Print sample names and full paths in a table
-DT::datatable(data.frame(Sample_ID = seur_basenames_diem, Path = seur_objs), rownames = F, options = list(pageLength = 100, dom = 'tip'))
+DT::datatable(data.frame(Sample_ID = seur_basenames_diem, Path = seur_objs_diem), rownames = F, options = list(pageLength = 100, dom = 'tip'))
 
 seur_objs <- lapply(seur_objs, readRDS) %>% setNames(seur_basenames)
 summary_dims <- lapply(summary_dims, readRDS) %>% setNames(seur_basenames_diem)
