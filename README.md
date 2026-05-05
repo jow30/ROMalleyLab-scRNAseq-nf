@@ -13,9 +13,6 @@ A Nextflow pipeline for processing single-nucleus RNA sequencing data from plant
 - [Method Details](#method-details)
 - [Integration](#integration)
 - [Q&A](#qa)
-  - [How to prepare the gtf file?](#how-to-prepare-the-gtf-file)
-  - [What if I want to use different cutoff values for different samples?](#what-if-i-want-to-use-different-cutoff-values-for-different-samples)
-  - [How can I build one summary report across samples from different experiments?](#how-can-i-build-one-summary-report-across-samples-from-different-experiments)
 
 ---
 
@@ -361,6 +358,10 @@ module load scrnaseq/1.0 && integrate \
 ---
 
 ## Q&A
+
+- [How to prepare the gtf file?](#how-to-prepare-the-gtf-file)
+- [What if I want to use different cutoff values for different samples?](#what-if-i-want-to-use-different-cutoff-values-for-different-samples)
+- [How can I build one summary report across samples from different experiments?](#how-can-i-build-one-summary-report-across-samples-from-different-experiments)
 
 ### How to prepare the gtf file?
 
