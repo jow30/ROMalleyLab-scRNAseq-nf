@@ -10,7 +10,7 @@ A Nextflow pipeline for processing single-nucleus RNA sequencing data from plant
   - [Optional Parameters](#optional-parameters)
   - [Species Configuration](#species-configuration)
 - [Output Structure](#output-structure)
-- [Pipeline Steps](#pipeline-steps)
+- [Method Details](#method-details)
 - [Integration](#integration)
 - [Q&A](#qa)
   - [How to prepare the gtf file?](#how-to-prepare-the-gtf-file)
@@ -162,7 +162,7 @@ These parameters only apply when running with multiple species (`--clean chi` is
 
 | Parameter                        | Default | Description                                    |
 |----------------------------------|---------|------------------------------------------------|
-| `--clean`                        | auto    | Cleaning method: `diem` (single-species) or `chi` (multi-species) |
+| `--clean`                        | auto    | Cleaning method: `diem` or `chi`               |
 | `--min_UMI_per_cell_barcode`     | `400`   | Minimum UMIs per barcode for chi demultiplexing |
 | `--chisq_pvalues_max`            | `0.01`  | Maximum chi-squared p-value                    |
 | `--ambient_rate_max`             | `0.5`   | Maximum ambient RNA rate                       |
@@ -172,7 +172,7 @@ These parameters only apply when running with multiple species (`--clean chi` is
 
 | Parameter   | Default | Description                          |
 |-------------|---------|--------------------------------------|
-| `--cleanup` | `true`  | Cleanup large intermediate files     |
+| `--cleanup` | `false`  | Cleanup large intermediate files     |
 
 ### Species Configuration
 
@@ -277,23 +277,38 @@ params.combined_ref_map = [
 
 **seur_clean_*.rds:** Seurat object after all filtering steps with full metadata -> good for downstream analysis like integration and differential analysis
 
+Note: If no cell left after filtering, only `seur_diem_*.rds` will be generated, and `seur_clean_*.rds` will be omitted.
+
 ---
 
-## Pipeline Steps
+## Method Details
 
-1. **Reference preparation** — builds a CellRanger reference from FASTA + GTF (skipped if a pre-built reference exists)
-2. **CellRanger count** — aligns FASTQs and generates cell × gene count matrices
-3. **Preprocessing / Demultiplexing** — DIEM-based debris removal (single-species) or chi-squared demultiplexing (multi-species)
-4. **Read counting** — separates uniquely/multi-mapped reads; counts reads in 2 kb windows
-5. **Velocyto** — generates spliced/unspliced RNA velocity loom files
-6. **Full preprocessing** — Seurat-based QC, normalization, clustering, and annotation using velocyto ratios
-7. **Summary report** — HTML report aggregating QC metrics across samples
+1. **Reference preparation**  
+   In single-species mode, the pipeline uses `cellranger mkref` to prepare one species-specific reference and processes all samples against that reference. In multi-species mode, it uses `cellranger mkref` to concatenate references from all selected species into one combined reference so each sample can be analyzed in a shared cross-species context, which helps limit overestimation of read-count mapping to both species. Gene lists of mitochondria, chloroplast, and ribosomal genes are provided in the reference yaml file to help identify and remove these organelles from the analysis. For cell annotation, species-specific reference atlas and celltype marker references listed in the reference yaml file can be applied via either anchor-based label transfer or marker-based celltype assignment for cell clusters.
+
+2. **CellRanger count**  
+   Raw FASTQ files are processed with `cellranger count` to perform barcode/UMI parsing, alignment to the selected reference, and generation of per-sample gene-by-cell expression matrices. In multi-species experiments, alignment is performed against the combined reference to preserve species assignment information at the barcode level. This stage produces canonical `cellranger count` outputs (including raw matrices and summary metrics) that serve as the quantitative input for debris filtering, demultiplexing, and downstream quality control.
+
+3. **Debris Filtering and Species Demultiplexing**  
+   Debris filtering is performed on raw count outputs to identify high-confidence cell barcodes while controlling ambient RNA contamination. In single-species mode, a minimal [DIEM](https://github.com/marcalva/diem) debris score of 1 is applied to separate likely nuclei/cells from background droplets, and debris-aware metadata are carried forward for QC tracking. In multi-species mode, species identity and cross-species contamination are resolved by barcode-level demultiplexing (chi-squared framework as introduced in [Baumgart, L.A., Greenblum, S.I., Morales-Cruz, A. et al. Recruitment, rewiring and deep conservation in flowering plant gene regulation. Nat. Plants 11, 1514–1527 (2025).](https://www.nature.com/articles/s41477-025-02047-0)), with optional handling of multiplets according to user parameters.
+
+4. **Read Mapping and Coverage Analysis**  
+   Aligned BAM files are partitioned into uniquely mapped and multi-mapped read sets to characterize mapping specificity. Genome-wide read depth is then summarized in fixed-width genomic bins (default 2 kb), producing per-sample count tracks suitable for chromosome-level coverage diagnostics and cross-sample comparability checks. These summaries are integrated into the report to contextualize sequencing complexity and mapping behavior beyond standard UMI-level metrics, especially for diagnosing the presence of organellar/contamination or technical artifacts in the data.
+
+5. **Cell Preprocessing and Quality Control**  
+   First, unspliced ratio for each cell barcode was quantified based on the velocyto output. Then, barcodes are filtered stepwise by unspliced ratio, UMI count, gene count, organellar content (mitochondrial/chloroplast), and optional doublet removal, with dimensional reduction and clustering used to evaluate cluster quality and remove low-marker clusters when configured. Thresholds for these filters are configurable. By default, the pipeline will remove cells with unspliced ratio < 0.1, UMI count < 400, gene count < 300, chloroplast content > 15%, mitochondrial content > 10%, and optional doublet removal with a maximum doublet score of 0.4. Genes expressed in less than 5 cells are removed. Low-marker clusters with less than 5 markers are removed. Samples with less than 500 cells are skipped. 3000 highly variable genes are used for dimensionality reduction and clustering.
+
+6. **Cell Annotation**  
+  Cell annotation is performed on the filtered Seurat objects using either anchor-based label transfer for all cells or marker-based celltype assignment for cell clusters. User-specified reference atlas can be applied for anchor-based label transfer using `FindTransferAnchors` and `TransferData`. Marker-based celltype assignment identifies significant cluster markers with `FindAllMarkers`, compares them against species-specific marker sets from `ref_yaml` using Fisher enrichment, and assigns each cluster to the best-supported marker module (or `Unknown/Contamination` when no significant enrichment is detected).
+
+7. **Summary report** 
+   A consolidated HTML report (`summary.html`) is rendered from pipeline outputs to provide a comprehensive summary across samples. The report integrates CellRanger metrics, debris-filtering summaries, Seurat QC distributions, read-count/coverage diagnostics, and key preprocessing checkpoints, enabling transparent parameter review and rapid cross-sample comparison. 
 
 ---
 
 ## Integration
 
-Use `integrate` (entrypoint for `bin/integration.R`) on the per-sample Seurat objects produced by this pipeline (typically `preprocess/seur_clean_*.rds`).
+Use `integrate` (entrypoint for `bin/integration.R`) on the per-sample Seurat objects produced by this pipeline (typically `preprocess/seur_clean_*.rds`) with the user-specified integration method (either RPCA, CCA, or Harmony).
 
 ### Usage 
 
