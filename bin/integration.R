@@ -238,6 +238,9 @@ if (!is.null(seurat_reference) && file.exists(seurat_reference)) {
 
 saveRDS(seuratObjs.integrated, paste0(resDir, "/seuratObjs_", integration_method, "_integrated.rds"))
 
+# color palette
+color_set <- c(brewer.pal(n = 8, name = 'Set2'), brewer.pal(n = 9, name = 'Set1'), brewer.pal(n = 12, name = 'Set3'), brewer.pal(n = 12, name = 'Paired'))
+
 # percentage bar plots of samples in each cluster --------------------------------
 
 if ("anchor_anno" %in% colnames(seuratObjs.integrated@meta.data)) {
@@ -251,7 +254,7 @@ if ("anchor_anno" %in% colnames(seuratObjs.integrated@meta.data)) {
   write.csv(wide_df, file = paste0(resDir, "/cell_percentage_", integration_method, "_samples_perCelltype.csv"))
 
   long_df$sample <- factor(long_df$sample, levels = unique(long_df$sample))
-  sample_color <- c(brewer.pal(n = 8, name = 'Set2'), brewer.pal(n = 9, name = 'Set1'), brewer.pal(n = 12, name = 'Set3'), brewer.pal(n = 12, name = 'Paired'))[1:length(levels(long_df$sample))]
+  sample_color <- color_set[1:length(levels(long_df$sample))]
   names(sample_color) <- levels(long_df$sample)
 
   p <- ggplot(long_df, aes(x = cluster, y = Percentage, fill = sample)) +
@@ -286,7 +289,7 @@ if ("anchor_anno" %in% colnames(seuratObjs.integrated@meta.data)) {
 
   long_df$sample <- factor(long_df$sample, levels = rev(unique(long_df$sample)))
   long_df$cluster <- factor(long_df$cluster, levels = unique(long_df$cluster))
-  cluster_color <- c(brewer.pal(n = 8, name = 'Set2'), brewer.pal(n = 9, name = 'Set1'), brewer.pal(n = 12, name = 'Set3'), brewer.pal(n = 12, name = 'Paired'))[1:length(levels(long_df$cluster))]
+  cluster_color <- color_set[1:length(levels(long_df$cluster))]
   names(cluster_color) <- levels(long_df$cluster)
 
   p <- ggplot(long_df, aes(x = sample, y = Percentage, fill = cluster)) +
