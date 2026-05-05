@@ -298,7 +298,7 @@ Note: If no cell left after filtering, only `seur_diem_*.rds` will be generated,
 6. **Cell Annotation**  
   Cell annotation is performed on the filtered Seurat objects using either anchor-based label transfer for all cells or marker-based celltype assignment for cell clusters. User-specified reference atlas can be applied for anchor-based label transfer using `FindTransferAnchors` and `TransferData`. Marker-based celltype assignment identifies significant cluster markers with `FindAllMarkers`, compares them against species-specific marker sets from `ref_yaml` using Fisher enrichment, and assigns each cluster to the best-supported marker module (or `Unknown/Contamination` when no significant enrichment is detected).
 
-7. **Summary report** 
+7. **Summary report**  
    A consolidated HTML report (`summary.html`) is rendered from pipeline outputs to provide a comprehensive summary across samples. The report integrates CellRanger metrics, debris-filtering summaries, Seurat QC distributions, read-count/coverage diagnostics, and key preprocessing checkpoints, enabling transparent parameter review and rapid cross-sample comparison. 
 
 ---
